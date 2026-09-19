@@ -43,6 +43,25 @@ public class HealthTests : IClassFixture<ApiFactory>
         Assert.Contains("\"success\":true", json);
         Assert.Contains("\"username\":\"root\"", json);
     }
+
+    [Fact]
+    public async Task Swagger_json_is_available()
+    {
+        var res = await _client.GetAsync("/swagger/v1/swagger.json");
+        res.EnsureSuccessStatusCode();
+        var json = await res.Content.ReadAsStringAsync();
+        Assert.Contains("openapi", json);
+        Assert.DoesNotContain("<html", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Swagger_ui_is_available()
+    {
+        var res = await _client.GetAsync("/swagger/index.html");
+        res.EnsureSuccessStatusCode();
+        var html = await res.Content.ReadAsStringAsync();
+        Assert.Contains("swagger", html, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed class ApiFactory : WebApplicationFactory<Program>

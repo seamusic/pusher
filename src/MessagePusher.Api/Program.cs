@@ -9,6 +9,7 @@ using MessagePusher.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.OpenApi;
 using Serilog;
 using StackExchange.Redis;
 
@@ -91,6 +92,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 builder.Services.AddAuthorization();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSwaggerGen(o =>
+    {
+        o.SwaggerDoc("v1", new OpenApiInfo { Title = "Message Pusher API", Version = "v1" });
+    });
+}
 
 var app = builder.Build();
 
@@ -121,7 +129,7 @@ app.Use(async (ctx, next) =>
             return;
         }
     }
-    else if (!p.StartsWithSegments("/health") && !p.StartsWithSegments("/ready"))
+    else if (!p.StartsWithSegments("/health") && !p.StartsWithSegments("/ready") && !p.StartsWithSegments("/swagger"))
     {
         if (!limiter.Check(MessagePusher.Domain.RateLimitDefaults.MarkWeb + ip, MessagePusher.Domain.RateLimitDefaults.GlobalWebNum, MessagePusher.Domain.RateLimitDefaults.GlobalWebDurationSeconds))
         {
@@ -149,6 +157,11 @@ app.UseStaticFiles(new StaticFileOptions
         }
     }
 });
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.MapControllers();
 app.MapFallbackToFile("index.html");
 
