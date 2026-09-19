@@ -352,15 +352,16 @@ public sealed class GroupProvider : IChannelProvider
         var err = new StringBuilder();
         for (var i = 0; i < subChannels.Length; i++)
         {
-            message.To = subTargets[i];
-            message.Channel = subChannels[i];
             var sub = await repo.GetByNameAsync(subChannels[i], user.Id, ct)
                       ?? throw new BusinessException("获取群组消息子通道失败：not found");
             if (sub.Type == ChannelType.Group)
                 throw new BusinessException("群组消息子通道不能是群组消息");
+            var copy = message.Clone();
+            copy.To = subTargets[i];
+            copy.Channel = subChannels[i];
             try
             {
-                await factory.Resolve(sub.Type).SendAsync(message, user, sub, ct);
+                await factory.Resolve(sub.Type).SendAsync(copy, user, sub, ct);
             }
             catch (Exception ex)
             {

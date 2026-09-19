@@ -26,4 +26,7 @@ public class Message
     [NotMapped] public string? OpenId { get; set; }
     [NotMapped] public string? Desp { get; set; }
     [NotMapped] public string? Short { get; set; }
+
+    // 所有属性均为字符串/值类型，浅拷贝即完全独立副本
+    public Message Clone() => (Message)MemberwiseClone();
 }
