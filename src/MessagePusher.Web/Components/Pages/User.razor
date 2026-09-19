@@ -1,20 +1,147 @@
 @page "/user"
-@page "/user/add"
-@page "/user/edit/{Id:int}"
 @attribute [Authorize(Roles = "Admin")]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
 
 <PageTitle>用户管理 · 消息推送服务</PageTitle>
 
 <PageHeader Title="用户管理"
             Description="管理系统用户账号、角色与启用状态"
-            Icon="@Icons.Material.Filled.People" />
+            Icon="@Icons.Material.Filled.People">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" Href="/user/add">添加用户</MudButton>
+</PageHeader>
 
-<ComingSoon Class="mt-4"
-            Title="用户管理"
-            Description="以表格形式管理平台用户，支持新建、编辑、禁用账号与重置密码，并区分管理员与普通用户角色。"
-            Icon="@Icons.Material.Filled.People"
-            Features="@(new[] { "用户表格", "角色管理", "禁用 / 启用", "重置密码" })" />
+<MudPaper Class="panel mt-4" Elevation="0">
+    <MudStack Row="true" Class="mb-3" Wrap="Wrap.Wrap">
+        <MudTextField @bind-Value="_keyword" Placeholder="搜索用户名、显示名或邮箱" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="flex-grow-1" Style="min-width:240px" OnKeyDown="OnSearchKey" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync">搜索</MudButton>
+    </MudStack>
+    <MudTable Items="_pageItems" Hover="true" Dense="true" Loading="_loading" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>用户名</MudTh>
+            <MudTh>显示名称</MudTh>
+            <MudTh>邮箱</MudTh>
+            <MudTh>角色</MudTh>
+            <MudTh>状态</MudTh>
+            <MudTh Style="width:280px">操作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="用户名">@context.Username</MudTd>
+            <MudTd DataLabel="显示名称">@context.DisplayName</MudTd>
+            <MudTd DataLabel="邮箱">@(string.IsNullOrWhiteSpace(context.Email) ? "无" : context.Email)</MudTd>
+            <MudTd DataLabel="角色">
+                <MudChip T="string" Size="Size.Small" Color="@Labels.RoleColor(context.Role)" Variant="Variant.Outlined">@Labels.Role(context.Role)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="状态">
+                <MudChip T="string" Size="Size.Small" Color="@Labels.EnabledColor(context.Status)" Variant="Variant.Outlined">@(context.Status == 1 ? "已激活" : "已封禁")</MudChip>
+            </MudTd>
+            <MudTd DataLabel="操作">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="编辑" aria-label="编辑用户" Href="@($"/user/edit/{context.Id}")" />
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" title="提升" aria-label="提升用户角色" OnClick="@(() => ManageAsync(context, "promote"))" />
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" title="降级" aria-label="降低用户角色" OnClick="@(() => ManageAsync(context, "demote"))" />
+                <MudIconButton Icon="@(context.Status == 1 ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)" Size="Size.Small" title="启用/禁用" aria-label="启用或禁用用户" OnClick="@(() => ManageAsync(context, context.Status == 1 ? "disable" : "enable"))" />
+                <MudMenu Icon="@Icons.Material.Filled.MoreHoriz" Size="Size.Small" Dense="true">
+                    <MudMenuItem OnClick="@(() => ManageAsync(context, context.SendEmailToOthers == 1 ? "disallow_send_email_to_others" : "allow_send_email_to_others"))">
+                        @(context.SendEmailToOthers == 1 ? "撤回发送任意邮件权限" : "授予发送任意邮件权限")
+                    </MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ManageAsync(context, context.SaveMessageToDatabase == 1 ? "disallow_save_message_to_database" : "allow_save_message_to_database"))">
+                        @(context.SaveMessageToDatabase == 1 ? "撤回消息持久化权限" : "授予消息持久化权限")
+                    </MudMenuItem>
+                    <MudMenuItem OnClick="@(() => DeleteAsync(context))">删除账户</MudMenuItem>
+                </MudMenu>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary pa-4">暂无用户</MudText>
+        </NoRecordsContent>
+    </MudTable>
+    <div class="d-flex justify-end mt-3">
+        <MudPagination Count="_pages" Selected="_page" SelectedChanged="OnPage" Color="Color.Primary" />
+    </div>
+</MudPaper>
 
 @code {
-    [Parameter] public int? Id { get; set; }
+    private const int PageSize = 10;
+    private List<UserInfo> _items = [];
+    private string _keyword = "";
+    private bool _loading, _searching;
+    private int _page = 1, _pages = 1;
+    private IEnumerable<UserInfo> _pageItems => _items.Skip((_page - 1) * PageSize).Take(PageSize);
+
+    protected override Task OnInitializedAsync() => LoadAsync(0);
+
+    private async Task LoadAsync(int apiPage)
+    {
+        _loading = true;
+        var res = await Api.ListUsersAsync(Math.Max(0, apiPage));
+        _loading = false;
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items = res.Data ?? [];
+        _searching = false;
+        Recalc();
+        _page = 1;
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_keyword)) { await LoadAsync(0); return; }
+        _loading = true;
+        var res = await Api.SearchUsersAsync(_keyword.Trim());
+        _loading = false;
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items = res.Data ?? [];
+        _searching = true;
+        Recalc();
+        _page = 1;
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    private async Task OnPage(int page)
+    {
+        if (!_searching && page * PageSize > _items.Count && _items.Count % PageSize == 0)
+        {
+            var extra = await Api.ListUsersAsync(_items.Count / PageSize);
+            if (extra.Success && extra.Data is { Count: > 0 })
+                _items.AddRange(extra.Data);
+            Recalc();
+        }
+        _page = Math.Clamp(page, 1, _pages);
+    }
+
+    private void Recalc()
+    {
+        var n = Math.Max(1, (int)Math.Ceiling(_items.Count / (double)PageSize));
+        if (!_searching && _items.Count > 0 && _items.Count % PageSize == 0) n++;
+        _pages = n;
+    }
+
+    private async Task ManageAsync(UserInfo user, string action)
+    {
+        var res = await Api.ManageUserAsync(user.Username, action);
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        if (res.Data is not null)
+        {
+            user.Status = res.Data.Status;
+            user.Role = res.Data.Role;
+            user.SendEmailToOthers = res.Data.SendEmailToOthers;
+            user.SaveMessageToDatabase = res.Data.SaveMessageToDatabase;
+        }
+        Snackbar.Add("操作成功", Severity.Success);
+    }
+
+    private async Task DeleteAsync(UserInfo user)
+    {
+        var ok = await Dialog.ShowMessageBoxAsync("删除用户", $"确认删除账户 {user.Username}？", yesText: "删除", cancelText: "取消");
+        if (ok != true) return;
+        var res = await Api.ManageUserAsync(user.Username, "delete");
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items.Remove(user);
+        Recalc();
+        Snackbar.Add("已删除", Severity.Success);
+    }
 }

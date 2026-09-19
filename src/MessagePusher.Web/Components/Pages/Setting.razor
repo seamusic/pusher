@@ -1,5 +1,10 @@
 @page "/setting"
 @attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Nav
 
 <PageTitle>系统设置 · 消息推送服务</PageTitle>
 
@@ -7,8 +12,229 @@
             Description="个人资料、推送偏好与平台级参数配置"
             Icon="@Icons.Material.Filled.Settings" />
 
-<ComingSoon Class="mt-4"
-            Title="设置中心"
-            Description="按「个人设置 / 推送设置 / 系统设置」分组管理配置项，修改后即时生效，管理员可调整平台级参数。"
-            Icon="@Icons.Material.Filled.Settings"
-            Features="@(new[] { "个人设置", "推送设置", "系统设置", "分组 Tabs" })" />
+<MudTabs Rounded="true" Border="true" Class="mt-4">
+    <MudTabPanel Text="个人设置" Icon="@Icons.Material.Filled.Person">
+        <MudText Typo="Typo.h6" Class="mb-3">通用设置</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/user/edit">更新个人信息</MudButton>
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-3">账号绑定</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenEmail">绑定邮箱地址</MudButton>
+        </MudStack>
+    </MudTabPanel>
+    <MudTabPanel Text="推送设置" Icon="@Icons.Material.Filled.Send">
+        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-4">敏感配置不会回显。浏览器可能自动填充账号信息，请留意。</MudAlert>
+        <MudGrid>
+            <MudItem xs="12" md="5">
+                <MudSelect T="string" @bind-Value="_channel" Label="默认推送方式" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    @foreach (var ch in _channels)
+                    {
+                        <MudSelectItem Value="@ch.Name">@ch.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="7">
+                <MudTextField @bind-Value="_token" Label="全局鉴权令牌" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Casino" AdornmentAriaLabel="生成随机令牌" OnAdornmentClick="RandomToken" HelperText="优先级高于通道令牌" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePushAsync">保存</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="TestPushAsync">测试</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudTabPanel>
+    @if (Auth.User?.IsRoot == true)
+    {
+        <MudTabPanel Text="系统设置" Icon="@Icons.Material.Filled.AdminPanelSettings">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_opt.ServerAddress" Label="服务器地址" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" md="6" Class="d-flex align-end">
+                    <MudButton Variant="Variant.Outlined" OnClick="SaveServerAsync">保存地址</MudButton>
+                </MudItem>
+                <MudItem xs="12"><MudDivider /></MudItem>
+                <MudItem xs="12" md="4"><MudSwitch @bind-Value="_opt.RegisterEnabled" @bind-Value:after="SaveRegister" Label="允许新用户注册" Color="Color.Primary" /></MudItem>
+                <MudItem xs="12" md="4"><MudSwitch @bind-Value="_opt.PasswordRegisterEnabled" @bind-Value:after="SavePasswordRegister" Label="允许密码注册" Color="Color.Primary" /></MudItem>
+                <MudItem xs="12" md="4"><MudSwitch @bind-Value="_opt.EmailVerificationEnabled" @bind-Value:after="SaveEmailVerification" Label="邮箱验证" Color="Color.Primary" /></MudItem>
+                <MudItem xs="12" md="4"><MudSwitch @bind-Value="_opt.MessagePersistenceEnabled" @bind-Value:after="SavePersistence" Label="消息持久化" Color="Color.Primary" /></MudItem>
+                <MudItem xs="12" md="4"><MudSwitch @bind-Value="_opt.MessageRenderEnabled" @bind-Value:after="SaveRender" Label="消息渲染页" Color="Color.Primary" /></MudItem>
+                <MudItem xs="12"><MudDivider /></MudItem>
+                <MudItem xs="12" md="4"><MudTextField @bind-Value="_opt.SMTPServer" Label="SMTP 服务器" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                <MudItem xs="12" md="2"><MudTextField @bind-Value="_opt.SMTPPort" Label="端口" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                <MudItem xs="12" md="3"><MudTextField @bind-Value="_opt.SMTPAccount" Label="账号" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                <MudItem xs="12" md="3"><MudTextField @bind-Value="_opt.SMTPToken" Label="授权码" Variant="Variant.Outlined" Margin="Margin.Dense" InputType="InputType.Password" /></MudItem>
+                <MudItem xs="12"><MudButton Variant="Variant.Outlined" OnClick="SaveSmtpAsync">保存 SMTP</MudButton></MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        <MudTabPanel Text="其他设置" Icon="@Icons.Material.Filled.Article">
+            <MudTextField @bind-Value="_opt.Notice" Label="公告" Variant="Variant.Outlined" Lines="4" Class="mb-3" />
+            <MudButton Variant="Variant.Outlined" Class="mb-4" OnClick="SaveNoticeAsync">保存公告</MudButton>
+            <MudTextField @bind-Value="_opt.About" Label="关于" Variant="Variant.Outlined" Lines="6" Class="mb-3" />
+            <MudButton Variant="Variant.Outlined" Class="mb-4" OnClick="SaveAboutAsync">保存关于</MudButton>
+            <MudTextField @bind-Value="_opt.Footer" Label="页脚 HTML" Variant="Variant.Outlined" Lines="3" Class="mb-3" />
+            <MudButton Variant="Variant.Outlined" Class="mb-4" OnClick="SaveFooterAsync">保存页脚</MudButton>
+            <MudTextField @bind-Value="_opt.HomePageLink" Label="主页链接" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            <MudButton Variant="Variant.Outlined" OnClick="SaveHomeAsync">保存链接</MudButton>
+        </MudTabPanel>
+    }
+</MudTabs>
+
+<MudDialog @bind-Visible="_emailOpen">
+    <TitleContent>绑定邮箱</TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_bindEmail" Label="邮箱" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+        <MudButton Variant="Variant.Outlined" OnClick="SendCodeAsync" Disabled="_codeBusy">获取验证码</MudButton>
+        <MudTextField @bind-Value="_bindCode" Label="验证码" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseEmail">取消</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="BindEmailAsync">绑定</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private void OpenEmail() => _emailOpen = true;
+    private void CloseEmail() => _emailOpen = false;
+    private void RandomToken() => _token = Guid.NewGuid().ToString("N")[..16];
+
+    private List<BriefChannelDto> _channels = [];
+    private string _channel = "";
+    private string _token = "";
+    private bool _emailOpen, _codeBusy;
+    private string _bindEmail = "", _bindCode = "";
+    private readonly OptState _opt = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var self = await Api.SelfAsync();
+        if (self.Success && self.Data is not null)
+        {
+            Auth.SignIn(self.Data);
+            _channel = self.Data.Channel;
+            _token = self.Data.Token;
+        }
+        var ch = await Api.BriefChannelsAsync();
+        if (ch.Success)
+            _channels = ch.Data ?? [];
+        if (Auth.User?.IsRoot == true)
+            await LoadOptionsAsync();
+    }
+
+    private async Task LoadOptionsAsync()
+    {
+        var res = await Api.ListOptionsAsync();
+        if (!res.Success || res.Data is null) return;
+        foreach (var o in res.Data)
+            _opt.Set(o.Key, o.Value);
+    }
+
+    private async Task SavePushAsync()
+    {
+        var token = string.IsNullOrWhiteSpace(_token) ? " " : _token;
+        var res = await Api.UpdateSelfAsync(new { channel = _channel, token });
+        if (res.Success) Snackbar.Add("推送设置已保存", Severity.Success);
+        else Snackbar.Add(res.Message, Severity.Error);
+    }
+
+    private async Task TestPushAsync()
+    {
+        var username = Auth.User?.Username;
+        if (string.IsNullOrWhiteSpace(username)) return;
+        var result = await Api.PushAsync(username, new PushPayload { Title = "测试消息", Description = "控制台连通性测试", Channel = _channel, Token = _token });
+        if (result.Success) Snackbar.Add("测试消息已发送", Severity.Success);
+        else Snackbar.Add(result.Message, Severity.Error);
+    }
+
+    private async Task SendCodeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_bindEmail)) return;
+        _codeBusy = true;
+        var res = await Api.SendVerificationAsync(_bindEmail);
+        _codeBusy = false;
+        if (res.Success) Snackbar.Add("验证码已发送", Severity.Success);
+        else Snackbar.Add(res.Message, Severity.Error);
+    }
+
+    private async Task BindEmailAsync()
+    {
+        var res = await Api.BindEmailAsync(_bindEmail, _bindCode);
+        if (res.Success)
+        {
+            Snackbar.Add("邮箱绑定成功", Severity.Success);
+            _emailOpen = false;
+        }
+        else Snackbar.Add(res.Message, Severity.Error);
+    }
+
+    private Task SaveRegister() => Toggle("RegisterEnabled", _opt.RegisterEnabled);
+    private Task SavePasswordRegister() => Toggle("PasswordRegisterEnabled", _opt.PasswordRegisterEnabled);
+    private Task SaveEmailVerification() => Toggle("EmailVerificationEnabled", _opt.EmailVerificationEnabled);
+    private Task SavePersistence() => Toggle("MessagePersistenceEnabled", _opt.MessagePersistenceEnabled);
+    private Task SaveRender() => Toggle("MessageRenderEnabled", _opt.MessageRenderEnabled);
+    private Task SaveServerAsync() => SaveOpt("ServerAddress", _opt.ServerAddress.TrimEnd('/'));
+    private Task SaveNoticeAsync() => SaveOpt("Notice", _opt.Notice);
+    private Task SaveAboutAsync() => SaveOpt("About", _opt.About);
+    private Task SaveFooterAsync() => SaveOpt("Footer", _opt.Footer);
+    private Task SaveHomeAsync() => SaveOpt("HomePageLink", _opt.HomePageLink);
+
+    private async Task Toggle(string key, bool value)
+    {
+        await SaveOpt(key, value ? "true" : "false");
+        _opt.Set(key, value ? "true" : "false");
+    }
+
+    private async Task SaveSmtpAsync()
+    {
+        await SaveOpt("SMTPServer", _opt.SMTPServer);
+        await SaveOpt("SMTPPort", _opt.SMTPPort);
+        await SaveOpt("SMTPAccount", _opt.SMTPAccount);
+        if (!string.IsNullOrWhiteSpace(_opt.SMTPToken))
+            await SaveOpt("SMTPToken", _opt.SMTPToken);
+        Snackbar.Add("SMTP 已保存", Severity.Success);
+    }
+
+    private async Task SaveOpt(string key, string value)
+    {
+        var res = await Api.UpdateOptionAsync(key, value);
+        if (res.Success) Snackbar.Add("已保存", Severity.Success);
+        else Snackbar.Add(res.Message, Severity.Error);
+    }
+
+    private sealed class OptState
+    {
+        public string ServerAddress { get; set; } = "";
+        public bool RegisterEnabled { get; set; }
+        public bool PasswordRegisterEnabled { get; set; }
+        public bool EmailVerificationEnabled { get; set; }
+        public bool MessagePersistenceEnabled { get; set; }
+        public bool MessageRenderEnabled { get; set; }
+        public string SMTPServer { get; set; } = "";
+        public string SMTPPort { get; set; } = "";
+        public string SMTPAccount { get; set; } = "";
+        public string SMTPToken { get; set; } = "";
+        public string Notice { get; set; } = "";
+        public string About { get; set; } = "";
+        public string Footer { get; set; } = "";
+        public string HomePageLink { get; set; } = "";
+
+        public void Set(string key, string value)
+        {
+            switch (key)
+            {
+                case "ServerAddress": ServerAddress = value; break;
+                case "RegisterEnabled": RegisterEnabled = value == "true"; break;
+                case "PasswordRegisterEnabled": PasswordRegisterEnabled = value == "true"; break;
+                case "EmailVerificationEnabled": EmailVerificationEnabled = value == "true"; break;
+                case "MessagePersistenceEnabled": MessagePersistenceEnabled = value == "true"; break;
+                case "MessageRenderEnabled": MessageRenderEnabled = value == "true"; break;
+                case "SMTPServer": SMTPServer = value; break;
+                case "SMTPPort": SMTPPort = value; break;
+                case "SMTPAccount": SMTPAccount = value; break;
+                case "Notice": Notice = value; break;
+                case "About": About = value; break;
+                case "Footer": Footer = value; break;
+                case "HomePageLink": HomePageLink = value; break;
+            }
+        }
+    }
+}

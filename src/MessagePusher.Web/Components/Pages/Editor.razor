@@ -1,19 +1,130 @@
 @page "/editor"
 @page "/editor/{Id:int}"
 @attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject ISnackbar Snackbar
 
 <PageTitle>编辑消息 · 消息推送服务</PageTitle>
 
-<PageHeader Title="编辑消息"
-            Description="填写消息内容并选择通道，一键推送或保存为草稿"
+<PageHeader Title="@(Id is null ? "编辑消息" : "重发消息")"
+            Description="填写消息内容并选择通道后发送"
             Icon="@Icons.Material.Filled.EditNote" />
 
-<ComingSoon Class="mt-4"
-            Title="消息编辑器"
-            Description="可视化编辑消息标题、摘要与正文，选择目标通道并立即推送，支持草稿保存与历史消息复制修改。"
-            Icon="@Icons.Material.Filled.EditNote"
-            Features="@(new[] { "富文本编辑", "通道选择", "即时推送", "草稿保存" })" />
+<MudPaper Class="panel mt-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_title" Label="标题" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_to" Label="接收者" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="不填则使用默认接收者" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="string" @bind-Value="_channel" Label="推送通道" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                @foreach (var ch in _channels)
+                {
+                    <MudSelectItem Value="@ch.Name">@ch.Name @(string.IsNullOrWhiteSpace(ch.Description) ? "" : $"· {ch.Description}")</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_description" Label="描述" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_content" Label="内容" Variant="Variant.Outlined" Lines="10" Style="font-family:ui-monospace,Consolas,monospace" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_url" Label="链接" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" Class="d-flex justify-end gap-2">
+            <MudSwitch @bind-Value="_async" Color="Color.Primary" Label="@(_async ? "异步发送" : "同步发送")" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SendAsync" StartIcon="@Icons.Material.Filled.Send">
+                @if (_busy)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                发送
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
 
 @code {
     [Parameter] public int? Id { get; set; }
+
+    private string _title = "";
+    private string _to = "";
+    private string _channel = "";
+    private string _description = "";
+    private string _content = "";
+    private string _url = "";
+    private bool _async;
+    private bool _busy;
+    private List<BriefChannelDto> _channels = [];
+    private UserInfo? _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var self = await Api.SelfAsync();
+        if (self.Success)
+            _user = self.Data;
+        var ch = await Api.BriefChannelsAsync();
+        if (ch.Success)
+            _channels = ch.Data ?? [];
+        if (string.IsNullOrWhiteSpace(_channel))
+            _channel = _user?.Channel ?? "";
+        if (Id is int id)
+        {
+            var msg = await Api.GetMessageAsync(id);
+            if (msg.Success && msg.Data is not null)
+            {
+                _title = msg.Data.Title;
+                _to = msg.Data.To;
+                _channel = msg.Data.Channel;
+                _description = msg.Data.Description;
+                _content = msg.Data.Content;
+                _url = msg.Data.Url;
+            }
+            else
+                Snackbar.Add(msg.Message, Severity.Error);
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_description) && string.IsNullOrWhiteSpace(_content))
+        {
+            Snackbar.Add("请填写描述或内容", Severity.Warning);
+            return;
+        }
+        var username = _user?.Username ?? Auth.User?.Username;
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            Snackbar.Add("无法获取当前用户", Severity.Error);
+            return;
+        }
+        _busy = true;
+        var result = await Api.PushAsync(username, new PushPayload
+        {
+            Title = _title,
+            Description = _description,
+            Content = _content,
+            Url = _url,
+            Channel = _channel,
+            To = _to,
+            Async = _async,
+            Token = _user?.Token
+        });
+        _busy = false;
+        if (!result.Success)
+        {
+            Snackbar.Add(string.IsNullOrWhiteSpace(result.Message) ? "发送失败" : result.Message, Severity.Error);
+            return;
+        }
+        Snackbar.Add(Id is null ? "消息发送成功" : "消息重发成功", Severity.Success);
+        if (Id is null)
+        {
+            _title = _description = _content = _url = _to = "";
+        }
+    }
 }

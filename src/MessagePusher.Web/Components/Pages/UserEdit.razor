@@ -1,0 +1,103 @@
+@page "/user/add"
+@page "/user/edit"
+@page "/user/edit/{Id:int}"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject ApiAuthStateProvider Auth
+
+<PageTitle>@Title · 消息推送服务</PageTitle>
+
+<PageHeader Title="@Title"
+            Description="@(IsCreate ? "创建新的用户账户" : "更新用户名、密码与显示名称")"
+            Icon="@Icons.Material.Filled.Person">
+    <MudButton Variant="Variant.Text" Href="@(IsCreate || Id is not null ? "/user" : "/setting")">返回</MudButton>
+</PageHeader>
+
+<MudPaper Class="panel mt-4" Elevation="0" Style="max-width:560px">
+    @if (_loading)
+    {
+        <div class="d-flex justify-center pa-8"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+    }
+    else
+    {
+        <MudTextField @bind-Value="_username" Label="用户名" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Required="true" />
+        <MudTextField @bind-Value="_displayName" Label="显示名称" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+        <MudTextField @bind-Value="_password" Label="密码" Variant="Variant.Outlined" Margin="Margin.Dense" InputType="InputType.Password" HelperText="@(IsCreate ? "" : "留空表示不修改")" Class="mb-3" />
+        @if (!IsCreate)
+        {
+            <MudTextField Value="_email" Label="邮箱" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="true" Class="mb-3" />
+            <MudTextField Value="_github" Label="已绑定 GitHub" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="true" Class="mb-3" />
+            <MudTextField Value="_wechat" Label="已绑定微信" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="true" Class="mb-3" />
+        }
+        <div class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SubmitAsync">提交</MudButton>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    private bool IsCreate => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("user/add", StringComparison.OrdinalIgnoreCase);
+    private string Title => IsCreate ? "创建用户" : "更新用户信息";
+    private bool _loading, _busy;
+    private string _username = "", _displayName = "", _password = "", _email = "", _github = "", _wechat = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsCreate)
+        {
+            if (Auth.User is not { IsAdmin: true })
+                Nav.NavigateTo("/");
+            return;
+        }
+        if (Id is not null && Auth.User is not { IsAdmin: true })
+        {
+            Nav.NavigateTo("/user/edit");
+            return;
+        }
+        _loading = true;
+        var res = Id is int id ? await Api.GetUserAsync(id) : await Api.SelfAsync();
+        _loading = false;
+        if (!res.Success || res.Data is null)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        _username = res.Data.Username;
+        _displayName = res.Data.DisplayName;
+        _email = res.Data.Email;
+        _github = res.Data.GitHubId;
+        _wechat = res.Data.WeChatId;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_username) || (IsCreate && string.IsNullOrWhiteSpace(_password)))
+        {
+            Snackbar.Add("请填写必填项", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        ApiResult<object?> res;
+        if (IsCreate)
+            res = await Api.CreateUserAsync(new { username = _username, display_name = _displayName, password = _password });
+        else if (Id is int id)
+            res = await Api.UpdateUserAsync(new { id, username = _username, display_name = _displayName, password = _password });
+        else
+            res = await Api.UpdateSelfAsync(new { username = _username, display_name = _displayName, password = _password });
+        _busy = false;
+        if (!res.Success)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        Snackbar.Add(IsCreate ? "用户已创建" : "用户信息已更新", Severity.Success);
+        if (IsCreate)
+        {
+            _username = _displayName = _password = "";
+            Nav.NavigateTo("/user");
+        }
+    }
+}

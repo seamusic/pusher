@@ -1,14 +1,271 @@
 @page "/message"
 @attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject ApiAuthStateProvider Auth
 
 <PageTitle>消息列表 · 消息推送服务</PageTitle>
 
 <PageHeader Title="消息列表"
-            Description="查询历史消息，支持搜索、筛选、重发与实时刷新"
-            Icon="@Icons.Material.Filled.Mail" />
+            Description="查询历史消息，支持搜索、重发与自动刷新"
+            Icon="@Icons.Material.Filled.Mail">
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="() => LoadAsync(0)">刷新</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.EditNote" Href="/editor">编辑消息</MudButton>
+</PageHeader>
 
-<ComingSoon Class="mt-4"
-            Title="消息中心"
-            Description="提供全量消息的检索、状态跟踪、失败重发与 SSE 实时推送刷新，帮助您随时掌握每条消息的投递情况。"
-            Icon="@Icons.Material.Filled.Mail"
-            Features="@(new[] { "多条件搜索", "状态筛选", "失败重发", "SSE 实时刷新" })" />
+<MudPaper Class="panel mt-4" Elevation="0">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
+        <MudTextField @bind-Value="_keyword"
+                      Placeholder="搜索标题、描述或内容"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true"
+                      OnKeyDown="OnSearchKey"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Class="flex-grow-1"
+                      Style="min-width:240px" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync" Disabled="_loading">搜索</MudButton>
+        <MudSwitch @bind-Value="_auto" Color="Color.Primary" Label="自动刷新" />
+    </MudStack>
+
+    <MudTable Items="_pageItems" Hover="true" Dense="true" Loading="_loading" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>标题</MudTh>
+            <MudTh>通道</MudTh>
+            <MudTh>状态</MudTh>
+            <MudTh>时间</MudTh>
+            <MudTh Style="width:220px">操作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="标题">
+                <MudText Typo="Typo.subtitle2">@(string.IsNullOrWhiteSpace(context.Title) ? "(无标题)" : context.Title)</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Truncate(context.Description, 48)</MudText>
+            </MudTd>
+            <MudTd DataLabel="通道">@context.Channel</MudTd>
+            <MudTd DataLabel="状态">
+                <MudChip T="string" Size="Size.Small" Color="@Labels.MessageStatusColor(context.Status)" Variant="Variant.Outlined">@Labels.MessageStatus(context.Status)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="时间">@Labels.Time(context.Timestamp)</MudTd>
+            <MudTd DataLabel="操作">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" title="查看" aria-label="查看消息" OnClick="() => ViewAsync(context.Id)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" title="重发" aria-label="重新发送消息" OnClick="() => ResendAsync(context.Id)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="编辑" aria-label="编辑消息" Href="@($"/editor/{context.Id}")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="删除" aria-label="删除消息" OnClick="() => DeleteAsync(context.Id)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary pa-4">暂无消息</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    <div class="d-flex justify-end mt-3">
+        <MudPagination Count="_pages" Selected="_page" SelectedChanged="OnPage" Color="Color.Primary" BoundaryCount="1" MiddleCount="3" />
+    </div>
+</MudPaper>
+
+<MudDialog @bind-Visible="_viewOpen" Options="_dialogOptions">
+    <TitleContent>@(_view?.Title ?? "消息详情")</TitleContent>
+    <DialogContent>
+        @if (_view is not null)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@_view.Description</MudText>
+            <MudDivider Class="my-3" />
+            <pre class="msg-body">@_view.Content</pre>
+            @if (!string.IsNullOrWhiteSpace(_view.Link))
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="mt-2" OnClick="() => CopyAsync(_view.Link)">复制 Link</MudButton>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _viewOpen = false">关闭</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const int PageSize = 10;
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private List<MessageDto> _items = [];
+    private string _keyword = "";
+    private bool _loading;
+    private bool _auto = true;
+    private bool _searching;
+    private int _page = 1;
+    private int _pages = 1;
+    private bool _viewOpen;
+    private MessageDto? _view;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    private IEnumerable<MessageDto> _pageItems => _items.Skip((_page - 1) * PageSize).Take(PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(0);
+        var status = await Api.StatusAsync();
+        var persist = status.Data?.MessagePersistence == true || Auth.User?.SaveMessageToDatabase == 1;
+        if (!persist)
+            Snackbar.Add("当前账号可能没有消息持久化权限，消息可能不会保存。", Severity.Warning);
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        _ = LoopAsync(_cts.Token);
+    }
+
+    private async Task LoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (_timer is not null && await _timer.WaitForNextTickAsync(ct))
+            {
+                if (_auto && !_searching)
+                {
+                    // 静默刷新，避免每 10 秒触发一次 Loading 遮罩闪烁
+                    await LoadAsync(_page - 1, silent: true);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task LoadAsync(int apiPage, bool silent = false)
+    {
+        if (!silent)
+            _loading = true;
+        var res = await Api.ListMessagesAsync(Math.Max(0, apiPage));
+        if (!silent)
+            _loading = false;
+        if (!res.Success)
+        {
+            if (!silent)
+                Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        _items = res.Data ?? [];
+        _searching = false;
+        RecalcPages();
+        _page = Math.Clamp(apiPage + 1, 1, _pages);
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_keyword))
+        {
+            await LoadAsync(0);
+            return;
+        }
+        _loading = true;
+        var res = await Api.SearchMessagesAsync(_keyword.Trim());
+        _loading = false;
+        if (!res.Success)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        _items = res.Data ?? [];
+        _searching = true;
+        RecalcPages();
+        _page = 1;
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SearchAsync();
+    }
+
+    private async Task OnPage(int page)
+    {
+        if (_searching)
+        {
+            _page = page;
+            return;
+        }
+        var need = page * PageSize;
+        if (need > _items.Count && _items.Count % PageSize == 0)
+        {
+            _loading = true;
+            var extra = await Api.ListMessagesAsync(_items.Count / PageSize);
+            _loading = false;
+            if (extra.Success && extra.Data is { Count: > 0 })
+                _items.AddRange(extra.Data);
+            RecalcPages();
+        }
+        _page = Math.Clamp(page, 1, _pages);
+    }
+
+    private void RecalcPages()
+    {
+        var n = Math.Max(1, (int)Math.Ceiling(_items.Count / (double)PageSize));
+        if (!_searching && _items.Count > 0 && _items.Count % PageSize == 0)
+            n++;
+        _pages = n;
+    }
+
+    private async Task ViewAsync(int id)
+    {
+        var res = await Api.GetMessageAsync(id);
+        if (!res.Success || res.Data is null)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        _view = res.Data;
+        _viewOpen = true;
+    }
+
+    private async Task ResendAsync(int id)
+    {
+        var res = await Api.ResendMessageAsync(id);
+        if (res.Success)
+            Snackbar.Add("消息已重新发送", Severity.Success);
+        else
+            Snackbar.Add(res.Message, Severity.Error);
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var ok = await Dialog.ShowMessageBoxAsync("删除消息", "确认删除该消息？", yesText: "删除", cancelText: "取消");
+        if (ok != true)
+            return;
+        var res = await Api.DeleteMessageAsync(id);
+        if (!res.Success)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        Snackbar.Add("已删除", Severity.Success);
+        _items.RemoveAll(x => x.Id == id);
+        RecalcPages();
+        if (_page > _pages)
+            _page = _pages;
+    }
+
+    private async Task CopyAsync(string text)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("已复制", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add(text, Severity.Info);
+        }
+    }
+
+    private static string Truncate(string? s, int n) =>
+        string.IsNullOrEmpty(s) ? "" : s.Length <= n ? s : s[..n] + "…";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

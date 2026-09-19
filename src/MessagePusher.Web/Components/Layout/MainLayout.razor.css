@@ -131,15 +131,21 @@
 }
 
 .drawer-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    /* 抽屉内容为纵向弹性布局，页脚用 margin-top:auto 固定底部。
+       相比绝对定位，可避免内容滚动时页脚与导航项重叠。 */
+    margin-top: auto;
+    flex: none;
     padding: 10px 20px;
     border-top: 1px solid var(--mud-palette-lines-default);
     background-color: var(--mud-palette-surface);
     display: flex;
     justify-content: flex-end;
+}
+
+.app-drawer ::deep .mud-drawer-content {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
 }
 
 /* ===== 主内容区 ===== */

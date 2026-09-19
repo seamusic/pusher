@@ -1,20 +1,149 @@
 @page "/channel"
-@page "/channel/add"
-@page "/channel/edit/{Id:int}"
 @attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject ApiAuthStateProvider Auth
 
 <PageTitle>推送通道 · 消息推送服务</PageTitle>
 
 <PageHeader Title="推送通道"
             Description="统一管理邮件、微信、飞书、钉钉、Telegram 等 16 种消息通道"
-            Icon="@Icons.Material.Filled.AccountTree" />
+            Icon="@Icons.Material.Filled.AccountTree">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Href="/channel/add">新建通道</MudButton>
+</PageHeader>
 
-<ComingSoon Class="mt-4"
-            Title="通道管理"
-            Description="以卡片与表单方式配置各推送通道的凭证、模板与参数，随时启用、停用或测试连通性。"
-            Icon="@Icons.Material.Filled.AccountTree"
-            Features="@(new[] { "16 种通道", "连通性测试", "模板配置", "启用 / 停用" })" />
+<MudPaper Class="panel mt-4" Elevation="0">
+    <MudStack Row="true" Class="mb-3" Wrap="Wrap.Wrap">
+        <MudTextField @bind-Value="_keyword" Placeholder="搜索通道名称或 ID" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="flex-grow-1" Style="min-width:240px" OnKeyDown="OnSearchKey" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync">搜索</MudButton>
+    </MudStack>
+    <MudTable Items="_pageItems" Hover="true" Dense="true" Loading="_loading" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>名称</MudTh>
+            <MudTh>类型</MudTh>
+            <MudTh>备注</MudTh>
+            <MudTh>状态</MudTh>
+            <MudTh>创建时间</MudTh>
+            <MudTh Style="width:240px">操作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="名称">@context.Name</MudTd>
+            <MudTd DataLabel="类型">@ChannelTypes.Name(context.Type)</MudTd>
+            <MudTd DataLabel="备注">@context.Description</MudTd>
+            <MudTd DataLabel="状态">
+                <MudChip T="string" Size="Size.Small" Color="@Labels.EnabledColor(context.Status)" Variant="Variant.Outlined">@Labels.Enabled(context.Status)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="创建时间">@Labels.Time(context.CreatedTime)</MudTd>
+            <MudTd DataLabel="操作">
+                <MudIconButton Icon="@Icons.Material.Filled.Science" Size="Size.Small" title="测试" aria-label="测试通道连通性" OnClick="() => TestAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="编辑" aria-label="编辑通道" Href="@($"/channel/edit/{context.Id}")" />
+                <MudIconButton Icon="@(context.Status == 1 ? Icons.Material.Filled.Pause : Icons.Material.Filled.PlayArrow)" Size="Size.Small" title="启用/停用" aria-label="启用或停用通道" OnClick="() => ToggleAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="删除" aria-label="删除通道" OnClick="() => DeleteAsync(context)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary pa-4">暂无通道</MudText>
+        </NoRecordsContent>
+    </MudTable>
+    <div class="d-flex justify-end mt-3">
+        <MudPagination Count="_pages" Selected="_page" SelectedChanged="OnPage" Color="Color.Primary" />
+    </div>
+</MudPaper>
 
 @code {
-    [Parameter] public int? Id { get; set; }
+    private const int PageSize = 10;
+    private List<ChannelDto> _items = [];
+    private string _keyword = "";
+    private bool _loading;
+    private bool _searching;
+    private int _page = 1;
+    private int _pages = 1;
+    private IEnumerable<ChannelDto> _pageItems => _items.Skip((_page - 1) * PageSize).Take(PageSize);
+
+    protected override Task OnInitializedAsync() => LoadAsync(0);
+
+    private async Task LoadAsync(int apiPage)
+    {
+        _loading = true;
+        var res = await Api.ListChannelsAsync(Math.Max(0, apiPage));
+        _loading = false;
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items = res.Data ?? [];
+        _searching = false;
+        Recalc();
+        _page = 1;
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_keyword)) { await LoadAsync(0); return; }
+        _loading = true;
+        var res = await Api.SearchChannelsAsync(_keyword.Trim());
+        _loading = false;
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items = res.Data ?? [];
+        _searching = true;
+        Recalc();
+        _page = 1;
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    private async Task OnPage(int page)
+    {
+        if (!_searching && page * PageSize > _items.Count && _items.Count % PageSize == 0)
+        {
+            var extra = await Api.ListChannelsAsync(_items.Count / PageSize);
+            if (extra.Success && extra.Data is { Count: > 0 })
+                _items.AddRange(extra.Data);
+            Recalc();
+        }
+        _page = Math.Clamp(page, 1, _pages);
+    }
+
+    private void Recalc()
+    {
+        var n = Math.Max(1, (int)Math.Ceiling(_items.Count / (double)PageSize));
+        if (!_searching && _items.Count > 0 && _items.Count % PageSize == 0) n++;
+        _pages = n;
+    }
+
+    private async Task ToggleAsync(ChannelDto ch)
+    {
+        var next = ch.Status == 1 ? 2 : 1;
+        var res = await Api.UpdateChannelAsync(new { id = ch.Id, status = next }, true);
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        ch.Status = res.Data?.Status ?? next;
+        Snackbar.Add("已更新状态", Severity.Success);
+    }
+
+    private async Task DeleteAsync(ChannelDto ch)
+    {
+        var ok = await Dialog.ShowMessageBoxAsync("删除通道", $"确认删除通道 {ch.Name}？", yesText: "删除", cancelText: "取消");
+        if (ok != true) return;
+        var res = await Api.DeleteChannelAsync(ch.Id);
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items.Remove(ch);
+        Recalc();
+        Snackbar.Add("已删除", Severity.Success);
+    }
+
+    private async Task TestAsync(ChannelDto ch)
+    {
+        var user = Auth.User ?? (await Api.SelfAsync()).Data;
+        if (user is null) { Snackbar.Add("无法获取当前用户", Severity.Error); return; }
+        var result = await Api.PushAsync(user.Username, new PushPayload
+        {
+            Title = "测试消息",
+            Description = $"通道 {ch.Name} 连通性测试",
+            Channel = ch.Name,
+            Token = user.Token
+        });
+        if (result.Success) Snackbar.Add("测试消息已发送", Severity.Success);
+        else Snackbar.Add(result.Message, Severity.Error);
+    }
 }

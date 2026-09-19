@@ -1,0 +1,339 @@
+@page "/channel/add"
+@page "/channel/edit/{Id:int}"
+@attribute [Authorize]
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "编辑通道" : "新建通道") · 消息推送服务</PageTitle>
+
+<PageHeader Title="@(IsEdit ? "更新通道配置" : "新建消息通道")"
+            Description="配置通道凭证、默认目标与鉴权令牌"
+            Icon="@Icons.Material.Filled.AccountTree">
+    <MudButton Variant="Variant.Text" Href="/channel">返回列表</MudButton>
+</PageHeader>
+
+<MudPaper Class="panel mt-4" Elevation="0">
+    @if (_loading)
+    {
+        <div class="d-flex justify-center pa-8"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_form.Name" Label="名称" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="仅英文字母和下划线，必须唯一" Required="true" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_form.Description" Label="备注" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="string" @bind-Value="_form.Type" Label="通道类型" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var t in ChannelTypes.All)
+                    {
+                        <MudSelectItem Value="@t.Value">@t.Text</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_form.Token" Label="鉴权令牌" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="通道维度令牌，可留空" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Casino" AdornmentAriaLabel="生成随机令牌" OnAdornmentClick="RandomToken" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">@Hint(_form.Type)</MudAlert>
+            </MudItem>
+            @foreach (var field in Fields(_form.Type))
+            {
+                <MudItem xs="12" md="@(field.Lines > 1 ? 12 : 6)">
+                    @if (field.Lines > 1)
+                    {
+                        <MudTextField Value="field.Get(_form)" ValueChanged="@((string v) => field.Set(_form, v ?? ""))" Label="@field.Label" Variant="Variant.Outlined" Lines="field.Lines" HelperText="@field.Placeholder" />
+                    }
+                    else if (field.Secret)
+                    {
+                        <MudTextField Value="field.Get(_form)" ValueChanged="@((string v) => field.Set(_form, v ?? ""))" Label="@field.Label" Variant="Variant.Outlined" Margin="Margin.Dense" InputType="InputType.Password" HelperText="@field.Placeholder" />
+                    }
+                    else if (field.Options is { Length: > 0 })
+                    {
+                        <MudSelect T="string" Value="field.Get(_form)" ValueChanged="@((string v) => field.Set(_form, v ?? ""))" Label="@field.Label" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (var o in field.Options)
+                            {
+                                <MudSelectItem Value="@o.Value">@o.Text</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        <MudTextField Value="field.Get(_form)" ValueChanged="@((string v) => field.Set(_form, v ?? ""))" Label="@field.Label" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="@field.Placeholder" />
+                    }
+                </MudItem>
+            }
+            @if (_form.Type == "telegram")
+            {
+                <MudItem xs="12">
+                    <MudButton Variant="Variant.Outlined" OnClick="FetchTelegramAsync">获取会话 ID</MudButton>
+                </MudItem>
+            }
+            <MudItem xs="12" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_form.Type == "email" || _busy)" OnClick="SubmitAsync">提交</MudButton>
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    private bool IsEdit => Id is > 0;
+    private bool _loading;
+    private bool _busy;
+    private readonly ChannelForm _form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsEdit)
+            return;
+        _loading = true;
+        var res = await Api.GetChannelAsync(Id!.Value);
+        _loading = false;
+        if (!res.Success || res.Data is null)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        var d = res.Data;
+        _form.Id = d.Id;
+        _form.Type = string.IsNullOrWhiteSpace(d.Type) ? "none" : d.Type;
+        _form.Name = d.Name;
+        _form.Description = d.Description;
+        _form.Secret = d.Secret;
+        _form.AppId = d.AppId;
+        _form.AccountId = d.AccountId;
+        _form.Url = d.Url;
+        _form.Other = d.Other;
+        _form.Token = d.Token;
+        if (_form.Type == "corp_app" && d.AppId.Contains('|'))
+        {
+            var p = d.AppId.Split('|', 2);
+            _form.CorpId = p[0];
+            _form.AgentId = p.Length > 1 ? p[1] : "";
+        }
+    }
+
+    private void RandomToken() => _form.Token = Guid.NewGuid().ToString("N")[..16];
+
+    private async Task FetchTelegramAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Secret))
+        {
+            Snackbar.Add("请先输入 Telegram 机器人令牌", Severity.Warning);
+            return;
+        }
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            var json = await http.GetFromJsonAsync<JsonElement>($"https://api.telegram.org/bot{_form.Secret}/getUpdates");
+            if (!json.GetProperty("ok").GetBoolean())
+            {
+                Snackbar.Add("获取失败", Severity.Error);
+                return;
+            }
+            var result = json.GetProperty("result");
+            if (result.GetArrayLength() == 0)
+            {
+                Snackbar.Add("请先向机器人发送一条消息", Severity.Warning);
+                return;
+            }
+            _form.AccountId = result[0].GetProperty("message").GetProperty("chat").GetProperty("id").ToString();
+            Snackbar.Add("会话 ID 获取成功", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("无法访问 Telegram：" + ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Name))
+        {
+            Snackbar.Add("请填写通道名称", Severity.Warning);
+            return;
+        }
+        object? body;
+        try
+        {
+            body = _form.ToPayload();
+        }
+        catch (JsonException)
+        {
+            Snackbar.Add("请求体不是合法 JSON", Severity.Error);
+            return;
+        }
+        if (body is null)
+            return;
+        _busy = true;
+        bool success;
+        string message;
+        if (IsEdit)
+        {
+            var res = await Api.UpdateChannelAsync(body);
+            success = res.Success;
+            message = res.Message;
+        }
+        else
+        {
+            var res = await Api.AddChannelAsync(body);
+            success = res.Success;
+            message = res.Message;
+        }
+        _busy = false;
+        if (!success)
+        {
+            Snackbar.Add(message, Severity.Error);
+            return;
+        }
+        Snackbar.Add(IsEdit ? "通道已更新" : "通道已创建", Severity.Success);
+        if (!IsEdit)
+            Nav.NavigateTo("/channel");
+    }
+
+    private sealed class ChannelForm
+    {
+        public int Id { get; set; }
+        public string Type { get; set; } = "none";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Secret { get; set; } = "";
+        public string AppId { get; set; } = "";
+        public string AccountId { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string Other { get; set; } = "";
+        public string? Token { get; set; }
+        public string CorpId { get; set; } = "";
+        public string AgentId { get; set; } = "";
+
+        public object? ToPayload()
+        {
+            var appId = AppId;
+            var url = Url;
+            var accountId = AccountId;
+            if (Type == "corp_app")
+                appId = $"{CorpId}|{AgentId}";
+            if (Type == "bark" && string.IsNullOrWhiteSpace(url))
+                url = "https://api.day.app";
+            if (Type == "one_bot")
+                url = url.TrimEnd('/');
+            if (Type == "custom")
+                JsonDocument.Parse(string.IsNullOrWhiteSpace(Other) ? "{}" : Other);
+            return new
+            {
+                id = Id,
+                type = Type,
+                name = Name,
+                description = Description,
+                secret = Secret,
+                app_id = appId,
+                account_id = accountId,
+                url,
+                other = Other,
+                token = Token
+            };
+        }
+    }
+
+    private sealed class BindField
+    {
+        public required string Label { get; init; }
+        public required string Placeholder { get; init; }
+        public bool Secret { get; init; }
+        public int Lines { get; init; } = 1;
+        public (string Value, string Text)[]? Options { get; init; }
+        public required Func<ChannelForm, string> Get { get; init; }
+        public required Action<ChannelForm, string> Set { get; init; }
+    }
+
+    private List<BindField> Fields(string type) => type switch
+    {
+        "test" =>
+        [
+            F("测试号 ID", x => x.AppId, (x, v) => x.AppId = v, "appID"),
+            F("测试号密钥", x => x.Secret, (x, v) => x.Secret = v, "appsecret", true),
+            F("测试模板 ID", x => x.Other, (x, v) => x.Other = v, "模板 ID"),
+            F("用户 Open ID", x => x.AccountId, (x, v) => x.AccountId = v, "用户列表微信号")
+        ],
+        "tencent_alarm" =>
+        [
+            F("SecretId", x => x.AppId, (x, v) => x.AppId = v, "子账号 SecretId"),
+            F("SecretKey", x => x.Secret, (x, v) => x.Secret = v, "子账号 SecretKey", true),
+            F("消息策略 ID", x => x.AccountId, (x, v) => x.AccountId = v, "例如 cm-6gl3pq19"),
+            F("区域", x => x.Other, (x, v) => x.Other = v, "例如 ap-shanghai")
+        ],
+        "corp_app" =>
+        [
+            F("企业 ID", x => x.CorpId, (x, v) => x.CorpId = v, "企业 ID"),
+            F("应用 AgentId", x => x.AgentId, (x, v) => x.AgentId = v, "AgentId"),
+            F("应用 Secret", x => x.Secret, (x, v) => x.Secret = v, "Secret", true),
+            F("用户账号", x => x.AccountId, (x, v) => x.AccountId = v, "通讯录账号"),
+            F("客户端类型", x => x.Other, (x, v) => x.Other = v, "", options: [("plugin", "微信中的企业微信插件"), ("app", "企业微信 APP")])
+        ],
+        "corp" => [F("Webhook 地址", x => x.Url, (x, v) => x.Url = v, "企业微信 Webhook")],
+        "lark" =>
+        [
+            F("Webhook 地址", x => x.Url, (x, v) => x.Url = v, "飞书 Webhook"),
+            F("签名校验密钥", x => x.Secret, (x, v) => x.Secret = v, "签名密钥", true)
+        ],
+        "ding" =>
+        [
+            F("Webhook 地址", x => x.Url, (x, v) => x.Url = v, "钉钉 Webhook"),
+            F("签名校验密钥", x => x.Secret, (x, v) => x.Secret = v, "签名密钥", true)
+        ],
+        "bark" =>
+        [
+            F("服务器地址", x => x.Url, (x, v) => x.Url = v, "默认 https://api.day.app"),
+            F("推送 key", x => x.Secret, (x, v) => x.Secret = v, "Bark key", true)
+        ],
+        "client" => [F("客户端连接密钥", x => x.Secret, (x, v) => x.Secret = v, "连接密钥", true)],
+        "telegram" =>
+        [
+            F("机器人令牌", x => x.Secret, (x, v) => x.Secret = v, "Bot token", true),
+            F("会话 ID", x => x.AccountId, (x, v) => x.AccountId = v, "Chat ID")
+        ],
+        "discord" => [F("Webhook 地址", x => x.Url, (x, v) => x.Url = v, "Discord Webhook")],
+        "one_bot" =>
+        [
+            F("服务器地址", x => x.Url, (x, v) => x.Url = v, "OneBot 地址"),
+            F("Access Token", x => x.Secret, (x, v) => x.Secret = v, "access token", true),
+            F("默认推送目标", x => x.AccountId, (x, v) => x.AccountId = v, "QQ 号或 group_群号")
+        ],
+        "group" =>
+        [
+            F("渠道列表", x => x.AppId, (x, v) => x.AppId = v, "用 | 分隔，例如 bark|telegram"),
+            F("默认推送目标", x => x.AccountId, (x, v) => x.AccountId = v, "用 | 分隔，可留空")
+        ],
+        "lark_app" =>
+        [
+            F("App ID", x => x.AppId, (x, v) => x.AppId = v, "App ID"),
+            F("App Secret", x => x.Secret, (x, v) => x.Secret = v, "App Secret", true),
+            F("默认推送目标", x => x.AccountId, (x, v) => x.AccountId = v, "类型:ID")
+        ],
+        "custom" =>
+        [
+            F("请求地址", x => x.Url, (x, v) => x.Url = v, "必须 HTTPS"),
+            F("请求体 JSON", x => x.Other, (x, v) => x.Other = v, "支持 $title $description $content $url $to", lines: 8)
+        ],
+        _ => []
+    };
+
+    private BindField F(string label, Func<ChannelForm, string> get, Action<ChannelForm, string> set, string placeholder, bool secret = false, int lines = 1, (string Value, string Text)[]? options = null) =>
+        new() { Label = label, Get = get, Set = set, Placeholder = placeholder, Secret = secret, Lines = lines, Options = options };
+
+    private static string Hint(string type) => type switch
+    {
+        "email" => "邮件通道请在个人设置中绑定邮箱，系统会自动创建，无需在此新建。",
+        "none" => "仅保存消息，不对外推送，需要具备消息持久化权限。",
+        "custom" => "仅支持 HTTPS POST，请求体须为 JSON，可使用 $title、$description、$content、$url、$to。",
+        "group" => "用 | 分隔子通道。目标数量需与通道数量一致，不需要指定的目标留空即可。",
+        _ => "按页面提示填写通道凭证。敏感信息不会回显到已保存的密钥字段。"
+    };
+}

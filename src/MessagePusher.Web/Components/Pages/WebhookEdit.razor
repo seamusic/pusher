@@ -1,0 +1,152 @@
+@page "/webhook/add"
+@page "/webhook/edit/{Id:int}"
+@attribute [Authorize]
+@using System.Text.Json
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "编辑接口" : "新建接口") · 消息推送服务</PageTitle>
+
+<PageHeader Title="@(IsEdit ? "更新接口配置" : "新建消息接口")"
+            Description="配置提取规则与构造规则，将外部请求转发到指定通道"
+            Icon="@Icons.Material.Filled.Webhook">
+    <MudButton Variant="Variant.Text" Href="/webhook">返回列表</MudButton>
+</PageHeader>
+
+<MudPaper Class="panel mt-4" Elevation="0">
+    @if (_loading)
+    {
+        <div class="d-flex justify-center pa-8"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_name" Label="名称" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="string" @bind-Value="_channel" Label="通道" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem Value="@("default")">默认通道</MudSelectItem>
+                    @foreach (var ch in _channels)
+                    {
+                        <MudSelectItem Value="@ch.Name">@ch.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    提取规则为 JSON，键是模板变量，值是 JSONPath。构造规则中可用 $变量。
+                    <MudLink Href="https://iamazing.cn/page/message-pusher-webhook" Target="_blank">教程</MudLink>
+                </MudAlert>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_extract" Label="提取规则" Variant="Variant.Outlined" Lines="10" Style="font-family:ui-monospace,Consolas,monospace" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_construct" Label="构造规则" Variant="Variant.Outlined" Lines="10" Style="font-family:ui-monospace,Consolas,monospace" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SubmitAsync">提交</MudButton>
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    private bool IsEdit => Id is > 0;
+    private bool _loading, _busy;
+    private string _name = "";
+    private string _channel = "default";
+    private string _extract = """
+{
+  "title": "attr1",
+  "description": "attr2.sub_attr",
+  "content": "attr3",
+  "url": "attr4"
+}
+""";
+    private string _construct = """
+{
+  "title": "$title",
+  "description": "描述信息：$description",
+  "content": "内容：$content",
+  "url": "https://example.com/$title"
+}
+""";
+    private List<BriefChannelDto> _channels = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var ch = await Api.BriefChannelsAsync();
+        if (ch.Success)
+            _channels = ch.Data ?? [];
+        if (!IsEdit)
+            return;
+        _loading = true;
+        var res = await Api.GetWebhookAsync(Id!.Value);
+        _loading = false;
+        if (!res.Success || res.Data is null)
+        {
+            Snackbar.Add(res.Message, Severity.Error);
+            return;
+        }
+        _name = res.Data.Name;
+        _channel = string.IsNullOrWhiteSpace(res.Data.Channel) ? "default" : res.Data.Channel;
+        _extract = res.Data.ExtractRule;
+        _construct = res.Data.ConstructRule;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("请填写名称", Severity.Warning);
+            return;
+        }
+        if (!IsJson(_extract) || !IsJson(_construct))
+        {
+            Snackbar.Add("提取规则或构造规则不是合法 JSON", Severity.Error);
+            return;
+        }
+        var body = new
+        {
+            id = Id ?? 0,
+            name = _name,
+            extract_rule = _extract,
+            construct_rule = _construct,
+            channel = _channel == "default" ? "" : _channel
+        };
+        _busy = true;
+        bool success;
+        string message;
+        if (IsEdit)
+        {
+            var res = await Api.UpdateWebhookAsync(body);
+            success = res.Success;
+            message = res.Message;
+        }
+        else
+        {
+            var res = await Api.AddWebhookAsync(body);
+            success = res.Success;
+            message = res.Message;
+        }
+        _busy = false;
+        if (!success)
+        {
+            Snackbar.Add(message, Severity.Error);
+            return;
+        }
+        Snackbar.Add(IsEdit ? "接口已更新" : "接口已创建", Severity.Success);
+        if (!IsEdit)
+            Nav.NavigateTo("/webhook");
+    }
+
+    private static bool IsJson(string s)
+    {
+        try { JsonDocument.Parse(s); return true; }
+        catch { return false; }
+    }
+}

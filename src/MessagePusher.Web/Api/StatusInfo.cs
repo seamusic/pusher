@@ -10,4 +10,9 @@ public sealed class StatusInfo
     public string ServerAddress { get; set; } = "";
     public int MessageCount { get; set; }
     public int UserCount { get; set; }
+    public bool MessagePersistence { get; set; }
+    public bool GithubOauth { get; set; }
+    public string GithubClientId { get; set; } = "";
+    public bool WechatLogin { get; set; }
+    public string WechatQrcode { get; set; } = "";
 }

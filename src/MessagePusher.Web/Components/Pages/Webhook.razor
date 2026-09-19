@@ -1,20 +1,147 @@
 @page "/webhook"
-@page "/webhook/add"
-@page "/webhook/edit/{Id:int}"
 @attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IJSRuntime JS
+@inject ApiAuthStateProvider Auth
 
 <PageTitle>Webhook · 消息推送服务</PageTitle>
 
 <PageHeader Title="Webhook 接口"
             Description="为外部系统生成接收地址，并配置消息路由与转发规则"
-            Icon="@Icons.Material.Filled.Webhook" />
+            Icon="@Icons.Material.Filled.Webhook">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Href="/webhook/add">新建接口</MudButton>
+</PageHeader>
 
-<ComingSoon Class="mt-4"
-            Title="Webhook 接入"
-            Description="创建独立的接收 URL，将外部系统的请求按规则路由到指定通道，支持签名校验与默认模板。"
-            Icon="@Icons.Material.Filled.Webhook"
-            Features="@(new[] { "独立 URL", "路由规则", "签名校验", "默认模板" })" />
+<MudPaper Class="panel mt-4" Elevation="0">
+    <MudStack Row="true" Class="mb-3" Wrap="Wrap.Wrap">
+        <MudTextField @bind-Value="_keyword" Placeholder="搜索接口名称" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="flex-grow-1" Style="min-width:240px" OnKeyDown="OnSearchKey" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync">搜索</MudButton>
+    </MudStack>
+    <MudTable Items="_pageItems" Hover="true" Dense="true" Loading="_loading" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>名称</MudTh>
+            <MudTh>通道</MudTh>
+            <MudTh>状态</MudTh>
+            <MudTh>创建时间</MudTh>
+            <MudTh Style="width:240px">操作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="名称">@context.Name</MudTd>
+            <MudTd DataLabel="通道">@(string.IsNullOrWhiteSpace(context.Channel) ? "默认通道" : context.Channel)</MudTd>
+            <MudTd DataLabel="状态">
+                <MudChip T="string" Size="Size.Small" Color="@Labels.EnabledColor(context.Status)" Variant="Variant.Outlined">@Labels.Enabled(context.Status)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="创建时间">@Labels.Time(context.CreatedTime)</MudTd>
+            <MudTd DataLabel="操作">
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="复制 URL" aria-label="复制 Webhook 地址" OnClick="() => CopyUrlAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="编辑" aria-label="编辑接口" Href="@($"/webhook/edit/{context.Id}")" />
+                <MudIconButton Icon="@(context.Status == 1 ? Icons.Material.Filled.Pause : Icons.Material.Filled.PlayArrow)" Size="Size.Small" title="启用/停用" aria-label="启用或停用接口" OnClick="() => ToggleAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="删除" aria-label="删除接口" OnClick="() => DeleteAsync(context)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary pa-4">暂无 Webhook</MudText>
+        </NoRecordsContent>
+    </MudTable>
+    <div class="d-flex justify-end mt-3">
+        <MudPagination Count="_pages" Selected="_page" SelectedChanged="OnPage" Color="Color.Primary" />
+    </div>
+</MudPaper>
 
 @code {
-    [Parameter] public int? Id { get; set; }
+    private const int PageSize = 10;
+    private List<WebhookDto> _items = [];
+    private string _keyword = "";
+    private bool _loading, _searching;
+    private int _page = 1, _pages = 1;
+    private IEnumerable<WebhookDto> _pageItems => _items.Skip((_page - 1) * PageSize).Take(PageSize);
+
+    protected override Task OnInitializedAsync() => LoadAsync(0);
+
+    private async Task LoadAsync(int apiPage)
+    {
+        _loading = true;
+        var res = await Api.ListWebhooksAsync(Math.Max(0, apiPage));
+        _loading = false;
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items = res.Data ?? [];
+        _searching = false;
+        Recalc();
+        _page = 1;
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_keyword)) { await LoadAsync(0); return; }
+        _loading = true;
+        var res = await Api.SearchWebhooksAsync(_keyword.Trim());
+        _loading = false;
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items = res.Data ?? [];
+        _searching = true;
+        Recalc();
+        _page = 1;
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    private async Task OnPage(int page)
+    {
+        if (!_searching && page * PageSize > _items.Count && _items.Count % PageSize == 0)
+        {
+            var extra = await Api.ListWebhooksAsync(_items.Count / PageSize);
+            if (extra.Success && extra.Data is { Count: > 0 })
+                _items.AddRange(extra.Data);
+            Recalc();
+        }
+        _page = Math.Clamp(page, 1, _pages);
+    }
+
+    private void Recalc()
+    {
+        var n = Math.Max(1, (int)Math.Ceiling(_items.Count / (double)PageSize));
+        if (!_searching && _items.Count > 0 && _items.Count % PageSize == 0) n++;
+        _pages = n;
+    }
+
+    private async Task ToggleAsync(WebhookDto item)
+    {
+        var next = item.Status == 1 ? 2 : 1;
+        var res = await Api.UpdateWebhookAsync(new { id = item.Id, status = next }, true);
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        item.Status = res.Data?.Status ?? next;
+        Snackbar.Add("已更新状态", Severity.Success);
+    }
+
+    private async Task DeleteAsync(WebhookDto item)
+    {
+        var ok = await Dialog.ShowMessageBoxAsync("删除接口", $"确认删除 {item.Name}？", yesText: "删除", cancelText: "取消");
+        if (ok != true) return;
+        var res = await Api.DeleteWebhookAsync(item.Id);
+        if (!res.Success) { Snackbar.Add(res.Message, Severity.Error); return; }
+        _items.Remove(item);
+        Recalc();
+        Snackbar.Add("已删除", Severity.Success);
+    }
+
+    private async Task CopyUrlAsync(WebhookDto item)
+    {
+        var status = await Api.StatusAsync();
+        var baseUrl = string.IsNullOrWhiteSpace(status.Data?.ServerAddress) ? "http://localhost:3000" : status.Data!.ServerAddress.TrimEnd('/');
+        var url = $"{baseUrl}/webhook/{item.Link}";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Snackbar.Add("已复制 Webhook URL", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add(url, Severity.Info);
+        }
+    }
 }
