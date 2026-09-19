@@ -73,24 +73,30 @@ public sealed class TokenStore : BackgroundService, ITokenStore
 
     public async Task UpdateChannelAsync(Channel newChannel, Channel oldChannel, CancellationToken ct = default)
     {
-        if (!IsTokenStoreType(oldChannel.Type))
-            return;
-
-        var oldItem = Channel2Item(oldChannel);
-        if (oldItem is null)
-            return;
-
-        var merged = Channel2Item(new Channel
+        // 跨 Type 编辑时旧条目移除与新条目添加相互独立：
+        // 旧 Type 是临时 Token 类型才移除；新 Type 是临时 Token 类型才添加。
+        if (IsTokenStoreType(oldChannel.Type))
         {
-            Type = oldChannel.Type,
-            AppId = string.IsNullOrEmpty(newChannel.AppId) || newChannel.AppId == oldChannel.AppId ? oldChannel.AppId : newChannel.AppId,
-            Secret = string.IsNullOrEmpty(newChannel.Secret) || newChannel.Secret == oldChannel.Secret ? oldChannel.Secret : newChannel.Secret
-        });
-        if (merged is null)
-            return;
-        if (!await IsSharedAsync(oldItem, ct))
-            RemoveItem(oldItem);
-        await AddItemAsync(merged, ct);
+            var oldItem = Channel2Item(oldChannel);
+            if (oldItem is not null && !await IsSharedAsync(oldItem, ct))
+                RemoveItem(oldItem);
+        }
+
+        if (IsTokenStoreType(newChannel.Type))
+        {
+            // 仅同 Type 编辑沿用"留空保留旧值"的合并；跨 Type 切换一律使用新凭证，防止旧密钥误填充。
+            var sameType = newChannel.Type == oldChannel.Type;
+            var merged = Channel2Item(new Channel
+            {
+                Type = newChannel.Type,
+                AppId = sameType && (string.IsNullOrEmpty(newChannel.AppId) || newChannel.AppId == oldChannel.AppId)
+                    ? oldChannel.AppId : newChannel.AppId,
+                Secret = sameType && (string.IsNullOrEmpty(newChannel.Secret) || newChannel.Secret == oldChannel.Secret)
+                    ? oldChannel.Secret : newChannel.Secret
+            });
+            if (merged is not null)
+                await AddItemAsync(merged, ct);
+        }
     }
 
     public async Task AddUserAsync(User user, CancellationToken ct = default)

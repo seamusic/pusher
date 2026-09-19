@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddSingleton<IChannelProvider, TencentAlarmProvider>();
         services.AddSingleton<IChannelProvider, NoneProvider>();
         services.AddSingleton<ChannelProviderFactory>();
+        services.AddSingleton<ChannelConfigValidatorRegistry>();
 
         services.AddHttpClient("channels", c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient("token-store", c => c.Timeout = TimeSpan.FromSeconds(5));
