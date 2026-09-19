@@ -6,13 +6,14 @@ _✨ Go 版 [message-pusher](https://github.com/songquanpeng/message-pusher) 的
 
 ## 描述
 
-自托管的统一消息推送网关：对外一个极简 API（`/push/<username>`），按用户配置的通道转发到邮件、微信、飞书、钉钉、Telegram 等 **19 种渠道**；同时提供 Web 控制台管理用户、通道、消息、Webhook 与系统配置。
+自托管的统一消息推送网关：对外一个极简 API（`/push/<username>`），按用户配置的通道转发到邮件、微信、飞书、钉钉、Telegram 等 **24 种渠道**；同时提供 Web 控制台管理用户、通道、消息、Webhook 与系统配置。
 
 1. **多种消息推送方式**：
    + 邮件、微信测试号、企业微信应用号 / 群机器人
    + 飞书自建应用 / 群机器人、钉钉群机器人
    + Bark、Telegram、Discord、腾讯云自定义告警
    + Server酱（Turbo / Server酱³）、PushDeer、PushPlus 推送加
+   + ntfy、Gotify、Pushover、WxPusher、PushMe
    + WebSocket 客户端、OneBot（QQ）
    + **群组消息**：多个通道组合成群组，一次推送到多个渠道
    + **自定义消息**：自定义请求 URL 与请求体，对接第三方服务
@@ -56,7 +57,7 @@ _✨ Go 版 [message-pusher](https://github.com/songquanpeng/message-pusher) 的
 ```
 dotnet/
 ├─ src/MessagePusher.Domain         # 实体、枚举、常量、领域异常
-├─ src/MessagePusher.Application    # 业务服务、19 通道、SSE / WebSocket、异步队列
+├─ src/MessagePusher.Application    # 业务服务、24 通道、SSE / WebSocket、异步队列
 ├─ src/MessagePusher.Infrastructure # EF Core、仓储、邮件、Markdown、限流、选项
 ├─ src/MessagePusher.Api            # HTTP 管道、Controllers、wwwroot（SPA）
 ├─ tests/                           # 单元 / 集成测试
@@ -187,7 +188,7 @@ Docker 示例：`docker run -e SESSION_SECRET=random_string ...`
    2. `description`：必填，可写 `desp`（Server 酱兼容）。
    3. `content`：选填 Markdown。
    4. `channel`：选填，不填则用后台默认通道。填的是通道**名称**，类型包括：
-      `email` / `test` / `corp_app` / `lark_app` / `corp` / `lark` / `ding` / `bark` / `client` / `telegram` / `discord` / `one_bot` / `group` / `custom` / `tencent_alarm` / `server_chan` / `pushdeer` / `push_plus` / `none`
+      `email` / `test` / `corp_app` / `lark_app` / `corp` / `lark` / `ding` / `bark` / `client` / `telegram` / `discord` / `one_bot` / `group` / `custom` / `tencent_alarm` / `server_chan` / `pushdeer` / `push_plus` / `ntfy` / `gotify` / `pushover` / `wx_pusher` / `pushme` / `none`
    5. `token`：若后台设置了推送 token 则必填；也可放 HTTP `Authorization`。全局 token 可鉴权任何通道，通道 token 只能鉴权对应通道。
    6. `url`：选填；不填则生成消息详情页 URL。
    7. `to`：选填。`@all` 或 `user1|user2`。
@@ -213,10 +214,17 @@ Docker 示例：`docker run -e SESSION_SECRET=random_string ...`
 | `server_chan` | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ |
 | `pushdeer` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | `push_plus` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ntfy` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `gotify` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `pushover` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `wx_pusher` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pushme` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
 
 多数通道 `description` 与 `content` 不要同时填：纯文本用 `description`，Markdown 用 `content`。
 
-> `server_chan` 的 `to`：Turbo（`SCT` 开头）下覆盖 `channel` 消息通道；Server酱³（`sctp` 开头）为固定目标，`to` 非空会被拒绝。`pushdeer` 的 pushkey 已绑定设备，为固定目标，不支持 `to`。`url` 均为追加到正文末尾（已包含则不重复）。
+> `server_chan` 的 `to`：Turbo（`SCT` 开头）下覆盖 `channel` 消息通道；Server酱³（`sctp` 开头）为固定目标，`to` 非空会被拒绝。`pushdeer` 的 pushkey 已绑定设备，为固定目标，不支持 `to`。`gotify`（App Token 绑定应用）与 `pushme`（push_key 绑定接收端）同为固定目标，`to` 非空会被拒绝。
+> `url` 映射：`ntfy` 用独立 `click` 字段，`pushover`/`wx_pusher` 用独立 `url` 字段，其余（含 `gotify`/`pushme`）追加到正文末尾（已包含则不重复）。
+> `wx_pusher` 仅开放标准模式（appToken + UID/topicIds），SPT 模式协议待核验、暂未开放。`xizhi`（息知）因当前发送域名/协议未核实，尚未开放。
 
 **Bash：**
 
