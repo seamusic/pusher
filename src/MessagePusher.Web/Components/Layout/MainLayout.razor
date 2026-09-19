@@ -27,8 +27,13 @@
                          TransformOrigin="Origin.TopRight"
                          Class="user-menu"
                          Dense="true">
-                    <ActivatorContent Context="activator">
-                        <button type="button" class="user-chip" aria-label="打开用户菜单">
+                    @* 自定义激活器不会自动绑定点击事件，必须调用 MenuContext（MudBlazor 9 约定） *@
+                    <ActivatorContent Context="menuContext">
+                        <button type="button"
+                                class="user-chip"
+                                aria-label="打开用户菜单"
+                                aria-haspopup="true"
+                                @onclick="menuContext.ToggleAsync">
                             <MudAvatar Size="Size.Small" Color="Color.Primary" Class="user-avatar">
                                 @UserInitial
                             </MudAvatar>
@@ -70,32 +75,37 @@
             </div>
         </div>
 
-        <MudNavMenu Dense="true" Rounded="true" Margin="Margin.Dense" Class="app-nav px-3">
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">概览</MudNavLink>
+        @* 导航全部指向受保护页面，未登录时不渲染，避免出现点了只会被弹回登录页的死链 *@
+        <AuthorizeView>
+            <Authorized>
+                <MudNavMenu Dense="true" Rounded="true" Margin="Margin.Dense" Class="app-nav px-3">
+                    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">概览</MudNavLink>
 
-            <MudNavGroup Title="消息" Icon="@Icons.Material.Filled.Forum" Expanded="true" Class="mt-2">
-                <MudNavLink Href="/message" Icon="@Icons.Material.Filled.Mail">消息列表</MudNavLink>
-                <MudNavLink Href="/editor" Icon="@Icons.Material.Filled.EditNote">编辑消息</MudNavLink>
-            </MudNavGroup>
-
-            <MudNavGroup Title="通道与接入" Icon="@Icons.Material.Filled.Hub" Expanded="true" Class="mt-2">
-                <MudNavLink Href="/channel" Icon="@Icons.Material.Filled.AccountTree">推送通道</MudNavLink>
-                <MudNavLink Href="/webhook" Icon="@Icons.Material.Filled.Webhook">Webhook</MudNavLink>
-            </MudNavGroup>
-
-            <AuthorizeView Roles="Admin">
-                <Authorized>
-                    <MudNavGroup Title="管理" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true" Class="mt-2">
-                        <MudNavLink Href="/user" Icon="@Icons.Material.Filled.People">用户管理</MudNavLink>
+                    <MudNavGroup Title="消息" Icon="@Icons.Material.Filled.Forum" Expanded="true" Class="mt-2">
+                        <MudNavLink Href="/message" Icon="@Icons.Material.Filled.Mail">消息列表</MudNavLink>
+                        <MudNavLink Href="/editor" Icon="@Icons.Material.Filled.EditNote">编辑消息</MudNavLink>
                     </MudNavGroup>
-                </Authorized>
-            </AuthorizeView>
 
-            <MudNavGroup Title="系统" Icon="@Icons.Material.Filled.Tune" Expanded="true" Class="mt-2">
-                <MudNavLink Href="/setting" Icon="@Icons.Material.Filled.Settings">系统设置</MudNavLink>
-                <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">关于</MudNavLink>
-            </MudNavGroup>
-        </MudNavMenu>
+                    <MudNavGroup Title="通道与接入" Icon="@Icons.Material.Filled.Hub" Expanded="true" Class="mt-2">
+                        <MudNavLink Href="/channel" Icon="@Icons.Material.Filled.AccountTree">推送通道</MudNavLink>
+                        <MudNavLink Href="/webhook" Icon="@Icons.Material.Filled.Webhook">Webhook</MudNavLink>
+                    </MudNavGroup>
+
+                    <AuthorizeView Roles="Admin">
+                        <Authorized Context="adminAuth">
+                            <MudNavGroup Title="管理" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true" Class="mt-2">
+                                <MudNavLink Href="/user" Icon="@Icons.Material.Filled.People">用户管理</MudNavLink>
+                            </MudNavGroup>
+                        </Authorized>
+                    </AuthorizeView>
+
+                    <MudNavGroup Title="系统" Icon="@Icons.Material.Filled.Tune" Expanded="true" Class="mt-2">
+                        <MudNavLink Href="/setting" Icon="@Icons.Material.Filled.Settings">系统设置</MudNavLink>
+                        <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">关于</MudNavLink>
+                    </MudNavGroup>
+                </MudNavMenu>
+            </Authorized>
+        </AuthorizeView>
 
         @if (_status is not null)
         {

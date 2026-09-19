@@ -1,5 +1,17 @@
 @inject NavigationManager Nav
 
 @code {
-    protected override void OnInitialized() => Nav.NavigateTo("/login");
+    protected override void OnInitialized()
+    {
+        // 记住来路，登录成功后回到原本想访问的页面
+        var relative = Nav.ToBaseRelativePath(Nav.Uri);
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        var returnUrl = "/" + relative;
+        Nav.NavigateTo($"/login?ReturnUrl={Uri.EscapeDataString(returnUrl)}");
+    }
 }

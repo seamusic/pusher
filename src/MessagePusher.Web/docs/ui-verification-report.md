@@ -6,10 +6,68 @@
 
 ## 一、结论
 
-**通过（已修复 2 个缺陷）**。功能页已从占位页升级为真实功能实现，路由、数据绑定、API 契约均正确；
+**通过（已修复 4 个缺陷）**。功能页已从占位页升级为真实功能实现，路由、数据绑定、API 契约均正确；
 全量重建 **0 错误 0 警告**；实际启动后各关键路由返回符合预期。
 
+> 2026-09-19 复查补充：发现并修复 P1-3（右上角用户菜单点击无反应，见下）。
+>
+> 2026-09-19 复查补充（二）：发现并修复 P1-4（后台首页与 About 页未登录即可访问，见下）。
+
 ## 二、已修复缺陷
+
+### P1-4　未登录即可打开后台首页，登录要求滞后且不可预期
+
+- **现象**：未登录状态下直接访问 `http://localhost:5100/` 可以正常打开后台首页（仪表盘），
+  点击左侧功能菜单后才会被要求登录。用户感知为"后台门户是公开的、登录要求来得莫名其妙"。
+- **根因**：`[Authorize]` 只加在了业务功能页（Message / Channel / Webhook / User / Setting / Editor）上，
+  `Home.razor`（`@page "/"`）与 `About.razor`（`@page "/about"`）**没有**授权特性，
+  因此它们既是匿名可达的路由，又渲染完整的后台外壳（AppBar + 抽屉导航），形成"未登录却进得后台"的错觉。
+- **修复**：
+  1. `Components/Pages/Home.razor`、`Components/Pages/About.razor` 补 `@attribute [Authorize]`，
+     使后台入口页与功能页同属受保护路由，未登录一律 302 到登录页。
+  2. `Components/Layout/MainLayout.razor` 将整个 `<MudNavMenu>` 包进 `<AuthorizeView><Authorized>`，
+     避免未登录用户短暂看到一堆点了就跳走的"死链接"；内层 `AuthorizeView Roles="Admin"` 改用
+     `Context="adminAuth"` 以避开命名冲突。
+  3. `Components/RedirectToLogin.razor` 重写为携带原始目标：
+     `Nav.NavigateTo($"/login?ReturnUrl={Uri.EscapeDataString("/" + relative)}")`。
+  4. `Components/Pages/Login.razor.cs` 增加 `[SupplyParameterFromQuery(Name = "ReturnUrl")]`，
+     并以 `RedirectTarget` 做开放重定向防护（仅接受以单个 `/` 开头、且不以 `//` 开头的相对路径，
+     否则回落到 `/`），登录成功后跳回用户原本请求的页面。
+- **验证**：Release 构建 0 错误 0 警告；启动后 `curl.exe -s -o NUL -w "%{http_code} %{redirect_url}"` 冒烟结果——
+
+  | 请求路径 | 状态码 | 跳转目标 |
+  | --- | --- | --- |
+  | `/` | 302 | `/login?ReturnUrl=%2F` |
+  | `/about` | 302 | `/login?ReturnUrl=%2Fabout` |
+  | `/message` | 302 | `/login?ReturnUrl=%2Fmessage` |
+  | `/editor/5` | 302 | `/login?ReturnUrl=%2Feditor%2F5` |
+  | `/login` | 200 | —（公开） |
+  | `/not-found` | 200 | —（公开） |
+
+  服务端日志同步确认：上述受保护请求均打印
+  `Authorization failed ... DenyAnonymousAuthorizationRequirement` → `AuthenticationScheme: Cookies was challenged` → `302`。
+- **未能覆盖**：登录成功后"跳回原目标页"的完整闭环需要真实的登录会话（Web 端 API 会话保存在电路服务端的
+  CookieContainer 内，无法从外部注入），请登录后从深链接进入验证一次。
+
+### P1-3　右上角用户菜单点击无反应（自定义激活器未绑定事件）
+
+- **现象**：登录后点击右上角头像/用户名无任何反应，退出登录入口不可达。
+- **根因**：MudBlazor 9.x 的 `MudMenu.ActivatorContent` **不会自动为自定义激活器绑定打开/切换事件**。
+  其 XML 文档明确说明：
+  > Default activators are wired automatically. **When using `ActivatorContent`, click and context menu
+  > activators should call the provided `MenuContext`.**
+
+  而原实现使用的是裸 `<button class="user-chip">`，未调用 `MenuContext`，因此点击后没有任何逻辑触发。
+- **修复**：`<ActivatorContent Context="menuContext">` 并在按钮上绑定 `@onclick="menuContext.ToggleAsync"`，
+  同时补充 `aria-haspopup="true"`。与 MudBlazor 官方示例一致。
+- **验证**：
+  - 生成的组件代码确认事件已挂载：
+    `AddAttribute(47, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, menuContext.ToggleAsync))`
+  - 层级已排除干扰：`.mud-appbar` 的 `z-index: var(--mud-zindex-appbar)`（默认 1200，与本项目覆写值一致），
+    `.mud-popover` 为 `calc(var(--mud-zindex-popover) + 1)`（默认 1300+1），弹层稳定位于 AppBar 之上，不会被压住。
+  - 同类风险排查：全项目仅此一处使用自定义 `ActivatorContent`；`User.razor` 的 `MudMenu` 使用默认激活器，自动绑定，无同类问题。
+- **未能覆盖**：真实浏览器点击验证需要已登录会话（Web 端的 API 会话保存在电路服务端的 CookieContainer 中，
+  无法从外部注入），故该项为代码级 + 官方契约级验证，建议登录后实点一次确认。
 
 ### P1-1　跨页共享样式定义在单页内联 `<style>` 中，导致深链接样式丢失
 
@@ -73,3 +131,17 @@
 13 个页面（Home、Message、Editor、Channel、ChannelEdit、Webhook、WebhookEdit、User、UserEdit、Setting、About、NotFound、Error）、
 3 个公共组件（PageHeader、StatCard、ComingSoon）、1 个枚举（StatTone）、2 个样式源（app.css、MainLayout.razor.css）、
 1 个 API 客户端与 1 个模型文件（ApiClient、Models）。
+
+P1-4 授权收口另核文件 5 个：`Pages/Home.razor`、`Pages/About.razor`、`Layout/MainLayout.razor`、
+`RedirectToLogin.razor`、`Pages/Login.razor.cs`。
+
+**授权现状一览**（未登录一律 302 → `/login?ReturnUrl=<原路径>`）：
+
+| 路由 | 页面 | 授权要求 |
+| --- | --- | --- |
+| `/` | Home | `[Authorize]`（本次新增） |
+| `/about` | About | `[Authorize]`（本次新增） |
+| `/message` `/editor/{id}` `/channel*` `/webhook*` `/user*` `/setting` | 业务页 | `[Authorize]`（原有） |
+| `/login` | Login | 匿名（公开） |
+| `/not-found` | NotFound | 匿名（公开） |
+| `/Error` | Error | 匿名（公开） |
