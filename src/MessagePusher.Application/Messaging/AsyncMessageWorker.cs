@@ -13,7 +13,6 @@ public sealed class AsyncMessageWorker : BackgroundService
     private readonly AsyncMessageQueue _queue;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AsyncMessageWorker> _logger;
-    private static int _loaded;
 
     public AsyncMessageWorker(AsyncMessageQueue queue, IServiceScopeFactory scopeFactory, ILogger<AsyncMessageWorker> logger)
     {
@@ -24,20 +23,37 @@ public sealed class AsyncMessageWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (Interlocked.Exchange(ref _loaded, 1) == 0)
-        {
-            await LoadPendingAsync(stoppingToken);
-        }
+        // 回灌与消费必须同时推进：有界队列（128、Wait）下先回灌后消费会在
+        // 待恢复消息超过容量时永久等待空位。
+        var replay = Task.Run(() => LoadPendingAsync(stoppingToken), CancellationToken.None);
 
-        await foreach (var id in _queue.ReadAllAsync(stoppingToken))
+        try
+        {
+            await foreach (var id in _queue.ReadAllAsync(stoppingToken))
+            {
+                try
+                {
+                    await ProcessAsync(id, stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "async message sender error");
+                }
+            }
+        }
+        finally
         {
             try
             {
-                await ProcessAsync(id, stoppingToken);
+                await replay;
+            }
+            catch (OperationCanceledException)
+            {
+                // 停机取消回灌属正常路径
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "async message sender error");
+                _logger.LogError(ex, "async message replay error");
             }
         }
     }

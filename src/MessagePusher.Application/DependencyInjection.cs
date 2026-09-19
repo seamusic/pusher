@@ -24,7 +24,6 @@ public static class DependencyInjection
         services.AddSingleton<ITokenStore>(sp => sp.GetRequiredService<TokenStore>());
         services.AddHostedService(sp => sp.GetRequiredService<TokenStore>());
         services.AddHostedService<AsyncMessageWorker>();
-        services.AddHostedService<AsyncMessageWorker>();
 
         services.AddScoped<PushService>();
         services.AddScoped<UserService>();
