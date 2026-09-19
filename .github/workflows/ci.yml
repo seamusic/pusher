@@ -2,21 +2,26 @@ name: ci
 on:
   push:
     paths:
-      - "dotnet/**"
+      - "src/**"
+      - "tests/**"
+      - "MessagePusher.slnx"
+      - "Directory.Build.props"
+      - ".github/workflows/ci.yml"
   pull_request:
     paths:
-      - "dotnet/**"
+      - "src/**"
+      - "tests/**"
+      - "MessagePusher.slnx"
+      - "Directory.Build.props"
+      - ".github/workflows/ci.yml"
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dotnet
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-      - run: dotnet restore
-      - run: dotnet build --no-restore -c Release
-      - run: dotnet test --no-build -c Release
+      - run: dotnet restore MessagePusher.slnx
+      - run: dotnet build MessagePusher.slnx --no-restore -c Release
+      - run: dotnet test MessagePusher.slnx --no-build -c Release
