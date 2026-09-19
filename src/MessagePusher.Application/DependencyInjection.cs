@@ -51,10 +51,12 @@ public static class DependencyInjection
         services.AddSingleton<IChannelProvider, TencentAlarmProvider>();
         services.AddSingleton<IChannelProvider, ServerChanProvider>();
         services.AddSingleton<IChannelProvider, PushDeerProvider>();
+        services.AddSingleton<IChannelProvider, PushPlusProvider>();
         services.AddSingleton<IChannelProvider, NoneProvider>();
         services.AddSingleton<ChannelProviderFactory>();
         services.AddSingleton<IChannelConfigValidator, ServerChanConfigValidator>();
         services.AddSingleton<IChannelConfigValidator, PushDeerConfigValidator>();
+        services.AddSingleton<IChannelConfigValidator, PushPlusConfigValidator>();
         services.AddSingleton<ChannelConfigValidatorRegistry>();
 
         services.AddHttpClient("channels", c => c.Timeout = TimeSpan.FromSeconds(30));

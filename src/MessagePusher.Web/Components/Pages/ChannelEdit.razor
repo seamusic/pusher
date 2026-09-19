@@ -334,6 +334,12 @@
             F("服务器地址", x => x.Url, (x, v) => x.Url = v, "留空用默认 https://api2.pushdeer.com，自建填根地址"),
             F("消息类型", x => x.Other, (x, v) => x.Other = v, "", options: [("", "跟随服务端默认(markdown)"), ("markdown", "Markdown"), ("text", "纯文本")])
         ],
+        "push_plus" =>
+        [
+            F("用户 token", x => x.Secret, (x, v) => x.Secret = v, "PushPlus token", true),
+            F("群组话题 topic", x => x.AccountId, (x, v) => x.AccountId = v, "留空为个人推送；发送时 To 可覆盖"),
+            F("消息模板 template", x => x.Other, (x, v) => x.Other = v, "留空默认 html，可填 txt/json/markdown 等")
+        ],
         _ => []
     };
 
@@ -348,6 +354,7 @@
         "group" => "用 | 分隔子通道。目标数量需与通道数量一致，不需要指定的目标留空即可。",
         "server_chan" => "Turbo（SCT 开头）与 Server酱³（sctp 开头）SendKey 不通用，按 Key 自动路由。Turbo 免费 5 条/天，会员额度更高且有每分钟频率上限，以官网为准；Server酱³ 见 sc3.ft07.com/doc。开通与最新额度：sct.ftqq.com、sc3.ft07.com。",
         "pushdeer" => "PushKey 已绑定接收设备，为固定目标，不支持在此指定发送目标（群组中该子通道目标留空）。默认端点 api2.pushdeer.com，可自建。开通与文档：pushdeer.com。",
+        "push_plus" => "code=200 表示请求受理成功、投递异步进行，不等于实际送达条数。未完成实名会返回 905 且无法发送；未实名额度受限、频率约 1 分钟 5 次，标题 ≤100 字、内容 ≤20000 字，会员额度以官网为准。文档：pushplus.plus。",
         _ => "按页面提示填写通道凭证。敏感信息不会回显到已保存的密钥字段。"
     };
 }

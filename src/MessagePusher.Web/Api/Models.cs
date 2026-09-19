@@ -98,6 +98,7 @@ public static class ChannelTypes
         ("tencent_alarm", "腾讯云消息告警"),
         ("server_chan", "Server酱"),
         ("pushdeer", "PushDeer"),
+        ("push_plus", "PushPlus 推送加"),
         ("none", "不推送")
     ];
 
