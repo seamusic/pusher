@@ -1,0 +1,20 @@
+@page "/user"
+@page "/user/add"
+@page "/user/edit/{Id:int}"
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>用户管理 · 消息推送服务</PageTitle>
+
+<PageHeader Title="用户管理"
+            Description="管理系统用户账号、角色与启用状态"
+            Icon="@Icons.Material.Filled.People" />
+
+<ComingSoon Class="mt-4"
+            Title="用户管理"
+            Description="以表格形式管理平台用户，支持新建、编辑、禁用账号与重置密码，并区分管理员与普通用户角色。"
+            Icon="@Icons.Material.Filled.People"
+            Features="@(new[] { "用户表格", "角色管理", "禁用 / 启用", "重置密码" })" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+}

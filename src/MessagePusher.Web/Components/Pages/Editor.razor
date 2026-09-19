@@ -1,0 +1,19 @@
+@page "/editor"
+@page "/editor/{Id:int}"
+@attribute [Authorize]
+
+<PageTitle>编辑消息 · 消息推送服务</PageTitle>
+
+<PageHeader Title="编辑消息"
+            Description="填写消息内容并选择通道，一键推送或保存为草稿"
+            Icon="@Icons.Material.Filled.EditNote" />
+
+<ComingSoon Class="mt-4"
+            Title="消息编辑器"
+            Description="可视化编辑消息标题、摘要与正文，选择目标通道并立即推送，支持草稿保存与历史消息复制修改。"
+            Icon="@Icons.Material.Filled.EditNote"
+            Features="@(new[] { "富文本编辑", "通道选择", "即时推送", "草稿保存" })" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+}

@@ -1,0 +1,48 @@
+@page "/about"
+@inject ApiClient Api
+
+<PageTitle>关于 · 消息推送服务</PageTitle>
+
+<PageHeader Title="关于"
+            Description="了解本服务的版本、作者与开源信息"
+            Icon="@Icons.Material.Filled.Info" />
+
+@if (_html is null)
+{
+    <div class="d-flex justify-center pa-10">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (string.IsNullOrWhiteSpace(_html))
+{
+    <ComingSoon Class="mt-4"
+                Title="暂无关于内容"
+                Description="管理员尚未配置关于页面内容。"
+                Icon="@Icons.Material.Filled.Article" />
+}
+else
+{
+    <MudPaper Class="about-panel" Elevation="0">
+        @((MarkupString)_html)
+    </MudPaper>
+}
+
+@code {
+    private string? _html;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.AboutAsync();
+        _html = result.Success ? result.Data ?? "" : result.Message;
+    }
+}
+
+<style>
+    .about-panel {
+        margin-top: 16px;
+        padding: 24px 28px;
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: var(--mud-default-borderradius);
+        line-height: 1.8;
+    }
+</style>

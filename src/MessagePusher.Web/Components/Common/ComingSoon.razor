@@ -1,0 +1,85 @@
+﻿@* 统一占位组件：用于尚未实现的功能页，保持全局视觉一致 *@
+<MudPaper Class="@RootClass" Elevation="0">
+    <div class="coming-soon-icon">
+        <MudIcon Icon="@Icon" Size="Size.Large" />
+    </div>
+    <MudText Typo="Typo.h6" Class="coming-soon-title">@Title</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary coming-soon-desc">
+        @Description
+    </MudText>
+    @if (Features is { Count: > 0 })
+    {
+        <MudChipSet T="string" Size="Size.Small" Variant="Variant.Text" Class="coming-soon-chips">
+            @foreach (var feature in Features)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="coming-soon-chip">@feature</MudChip>
+            }
+        </MudChipSet>
+    }
+    <span class="coming-soon-tag">开发中</span>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? Icon { get; set; } = Icons.Material.Filled.Construction;
+    [Parameter] public IReadOnlyList<string>? Features { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string RootClass => string.IsNullOrWhiteSpace(Class) ? "coming-soon" : $"coming-soon {Class}";
+}
+
+<style>
+    .coming-soon {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 56px 24px;
+        border: 1px dashed var(--mud-palette-lines-inputs);
+        background: var(--mud-palette-surface);
+        border-radius: var(--mud-default-borderradius);
+    }
+
+    .coming-soon-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        background: rgba(15, 118, 110, .10);
+        color: #0F766E;
+        margin-bottom: 16px;
+    }
+
+    .coming-soon-title {
+        font-weight: 600;
+    }
+
+    .coming-soon-desc {
+        max-width: 480px;
+        margin-top: 4px;
+    }
+
+    .coming-soon-chips {
+        margin-top: 20px;
+        justify-content: center;
+    }
+
+    .coming-soon-chip {
+        color: var(--mud-palette-text-secondary);
+    }
+
+    .coming-soon-tag {
+        margin-top: 24px;
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: .75rem;
+        font-weight: 500;
+        background: rgba(217, 119, 6, .12);
+        color: #B45309;
+    }
+</style>

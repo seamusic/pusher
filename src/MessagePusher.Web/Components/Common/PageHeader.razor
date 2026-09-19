@@ -1,0 +1,43 @@
+﻿@* 统一页头：标题 + 描述 + 右侧操作区 *@
+<div class="page-header">
+    <div class="page-header-main">
+        @if (Icon is not null)
+        {
+            <div class="page-header-icon" style="@IconStyle">
+                <MudIcon Icon="@Icon" Size="Size.Medium" />
+            </div>
+        }
+        <div>
+            <MudText Typo="Typo.h4" Class="page-header-title">@Title</MudText>
+            @if (!string.IsNullOrWhiteSpace(Description))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@Description</MudText>
+            }
+        </div>
+    </div>
+    @if (ChildContent is not null)
+    {
+        <div class="page-header-actions">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public Color IconColor { get; set; } = Color.Primary;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string IconStyle => IconColor switch
+    {
+        Color.Primary => "background:rgba(15,118,110,.12);color:#0F766E;",
+        Color.Secondary => "background:rgba(17,94,89,.12);color:#115E59;",
+        Color.Info => "background:rgba(2,132,199,.12);color:#0284C7;",
+        Color.Success => "background:rgba(22,163,74,.12);color:#16A34A;",
+        Color.Warning => "background:rgba(217,119,6,.12);color:#D97706;",
+        Color.Error => "background:rgba(220,38,38,.12);color:#DC2626;",
+        _ => "background:rgba(15,118,110,.12);color:#0F766E;"
+    };
+}

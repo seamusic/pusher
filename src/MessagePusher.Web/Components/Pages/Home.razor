@@ -1,0 +1,247 @@
+﻿@page "/"
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>概览 · 消息推送服务</PageTitle>
+
+<PageHeader Title="概览"
+            Description="系统运行状况与核心指标"
+            Icon="@Icons.Material.Filled.Dashboard" />
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mt-4">@_error</MudAlert>
+}
+else if (_status is null)
+{
+    <div class="d-flex justify-center pa-10">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" />
+    </div>
+}
+else
+{
+    <MudGrid Class="mt-2" Spacing="3">
+        @* ---- 核心指标 ---- *@
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Value="@_status.UserCount.ToString("N0")"
+                      Label="注册用户"
+                      Icon="@Icons.Material.Filled.Group"
+                      Tone="StatCard.StatTone.Primary" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Value="@_status.MessageCount.ToString("N0")"
+                      Label="累计消息"
+                      Icon="@Icons.Material.Filled.MarkEmailRead"
+                      Tone="StatCard.StatTone.Info" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Value="@(_status.Version is { Length: > 0 } ? $"v{_status.Version}" : "-")"
+                      Label="当前版本"
+                      Icon="@Icons.Material.Filled.NewReleases"
+                      Tone="StatCard.StatTone.Success" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Value="@_uptime"
+                      Label="持续运行"
+                      Icon="@Icons.Material.Filled.Schedule"
+                      Tone="StatCard.StatTone.Warning" />
+        </MudItem>
+
+        @* ---- 系统信息 ---- *@
+        <MudItem xs="12" md="7">
+            <MudPaper Class="panel" Elevation="0">
+                <div class="panel-head">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="panel-head-icon" />
+                    <MudText Typo="Typo.h6" Class="panel-head-title">系统信息</MudText>
+                </div>
+                <div class="kv-grid">
+                    <div class="kv-item">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">系统名称</MudText>
+                        <MudText Typo="Typo.subtitle2">@Safe(_status.SystemName)</MudText>
+                    </div>
+                    <div class="kv-item">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">服务地址</MudText>
+                        @if (string.IsNullOrWhiteSpace(_status.ServerAddress))
+                        {
+                            <MudText Typo="Typo.subtitle2">-</MudText>
+                        }
+                        else
+                        {
+                            <MudLink Href="@_status.ServerAddress" Target="_blank" Typo="Typo.subtitle2" Class="kv-link">
+                                @_status.ServerAddress
+                            </MudLink>
+                        }
+                    </div>
+                    <div class="kv-item">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">启动时间</MudText>
+                        <MudText Typo="Typo.subtitle2">@_startTime</MudText>
+                    </div>
+                    <div class="kv-item">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">版本号</MudText>
+                        <MudText Typo="Typo.subtitle2">@Safe(_status.Version)</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+
+        @* ---- 快捷入口 ---- *@
+        <MudItem xs="12" md="5">
+            <MudPaper Class="panel" Elevation="0">
+                <div class="panel-head">
+                    <MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Small" Class="panel-head-icon" />
+                    <MudText Typo="Typo.h6" Class="panel-head-title">快捷操作</MudText>
+                </div>
+                <div class="quick-grid">
+                    <MudButton Href="/editor" Variant="Variant.Text" Class="quick-item" aria-label="编辑消息">
+                        <div class="quick-item-inner">
+                            <MudIcon Icon="@Icons.Material.Filled.EditNote" Class="quick-item-icon tone-primary" />
+                            <MudText Typo="Typo.body2">编辑消息</MudText>
+                        </div>
+                    </MudButton>
+                    <MudButton Href="/channel" Variant="Variant.Text" Class="quick-item" aria-label="管理通道">
+                        <div class="quick-item-inner">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="quick-item-icon tone-info" />
+                            <MudText Typo="Typo.body2">管理通道</MudText>
+                        </div>
+                    </MudButton>
+                    <MudButton Href="/webhook" Variant="Variant.Text" Class="quick-item" aria-label="Webhook 接口">
+                        <div class="quick-item-inner">
+                            <MudIcon Icon="@Icons.Material.Filled.Webhook" Class="quick-item-icon tone-success" />
+                            <MudText Typo="Typo.body2">Webhook</MudText>
+                        </div>
+                    </MudButton>
+                    <MudButton Href="/setting" Variant="Variant.Text" Class="quick-item" aria-label="系统设置">
+                        <div class="quick-item-inner">
+                            <MudIcon Icon="@Icons.Material.Filled.Settings" Class="quick-item-icon tone-warning" />
+                            <MudText Typo="Typo.body2">系统设置</MudText>
+                        </div>
+                    </MudButton>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (!string.IsNullOrWhiteSpace(_status.HomePageLink))
+    {
+        <MudPaper Class="mt-3 footer-note" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" Class="mud-text-secondary" />
+            <MudLink Href="@_status.HomePageLink" Target="_blank" Typo="Typo.body2">访问项目主页</MudLink>
+        </MudPaper>
+    }
+}
+
+<style>
+    .panel {
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: var(--mud-default-borderradius);
+        padding: 20px 22px;
+        height: 100%;
+    }
+
+    .panel-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+
+    .panel-head-icon { color: var(--mud-palette-primary); }
+    .panel-head-title { font-weight: 600; }
+
+    .kv-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 14px 24px;
+    }
+
+    .kv-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .kv-link { word-break: break-all; }
+
+    .quick-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .quick-item {
+        justify-content: flex-start;
+        text-transform: none;
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: var(--mud-default-borderradius);
+        padding: 6px;
+        height: auto;
+    }
+
+    .quick-item-inner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+    }
+
+    .quick-item-icon {
+        border-radius: 10px;
+        padding: 8px;
+        width: auto;
+        height: auto;
+    }
+
+    .quick-item-icon.tone-primary { background: rgba(15, 118, 110, .12); color: #0F766E; }
+    .quick-item-icon.tone-info { background: rgba(2, 132, 199, .12); color: #0284C7; }
+    .quick-item-icon.tone-success { background: rgba(22, 163, 74, .12); color: #16A34A; }
+    .quick-item-icon.tone-warning { background: rgba(217, 119, 6, .12); color: #D97706; }
+
+    .footer-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: var(--mud-default-borderradius);
+    }
+</style>
+
+@code {
+    private StatusInfo? _status;
+    private string? _error;
+    private string _startTime = "-";
+    private string _uptime = "-";
+
+    private static string Safe(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var notice = await Api.NoticeAsync();
+        if (notice.Success && !string.IsNullOrWhiteSpace(notice.Data))
+            Snackbar.Add(notice.Data, Severity.Info);
+
+        var status = await Api.StatusAsync();
+        if (!status.Success || status.Data is null)
+        {
+            _error = string.IsNullOrWhiteSpace(status.Message)
+                ? "无法连接 API，请先启动 MessagePusher.Api（默认 http://localhost:3000）"
+                : status.Message;
+            return;
+        }
+
+        _status = status.Data;
+        if (_status.StartTime > 0)
+        {
+            var start = DateTimeOffset.FromUnixTimeSeconds(_status.StartTime).LocalDateTime;
+            _startTime = start.ToString("yyyy-MM-dd HH:mm:ss");
+            _uptime = FormatUptime(DateTimeOffset.Now - start);
+        }
+    }
+
+    private static string FormatUptime(TimeSpan span) => span.TotalDays >= 1
+        ? $"{(int)span.TotalDays} 天 {span.Hours} 小时"
+        : span.TotalHours >= 1
+            ? $"{(int)span.TotalHours} 小时 {span.Minutes} 分钟"
+            : $"{(int)span.TotalMinutes} 分钟";
+}

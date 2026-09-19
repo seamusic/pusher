@@ -4,6 +4,7 @@
     <Project Path="src/MessagePusher.Application/MessagePusher.Application.csproj" />
     <Project Path="src/MessagePusher.Domain/MessagePusher.Domain.csproj" />
     <Project Path="src/MessagePusher.Infrastructure/MessagePusher.Infrastructure.csproj" />
+    <Project Path="src/MessagePusher.Web/MessagePusher.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MessagePusher.Api.IntegrationTests/MessagePusher.Api.IntegrationTests.csproj" />

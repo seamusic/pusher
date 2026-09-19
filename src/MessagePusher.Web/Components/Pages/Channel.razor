@@ -1,0 +1,20 @@
+@page "/channel"
+@page "/channel/add"
+@page "/channel/edit/{Id:int}"
+@attribute [Authorize]
+
+<PageTitle>推送通道 · 消息推送服务</PageTitle>
+
+<PageHeader Title="推送通道"
+            Description="统一管理邮件、微信、飞书、钉钉、Telegram 等 16 种消息通道"
+            Icon="@Icons.Material.Filled.AccountTree" />
+
+<ComingSoon Class="mt-4"
+            Title="通道管理"
+            Description="以卡片与表单方式配置各推送通道的凭证、模板与参数，随时启用、停用或测试连通性。"
+            Icon="@Icons.Material.Filled.AccountTree"
+            Features="@(new[] { "16 种通道", "连通性测试", "模板配置", "启用 / 停用" })" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+}

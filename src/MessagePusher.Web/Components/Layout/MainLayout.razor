@@ -1,0 +1,155 @@
+﻿@inherits LayoutComponentBase
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<MudThemeProvider Theme="@AppTheme.Current" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="true" Color="Color.Inherit" Class="app-bar">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                        Color="Color.Inherit"
+                        Edge="Edge.Start"
+                        Size="Size.Medium"
+                        Class="mr-1"
+                        OnClick="@ToggleDrawer"
+                        aria-label="切换导航菜单" />
+        <img src="logo.png" alt="logo" class="app-bar-logo" />
+        <MudText Typo="Typo.subtitle1" Class="app-bar-title ml-2">消息推送服务</MudText>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight"
+                         Class="user-menu"
+                         Dense="true">
+                    <ActivatorContent Context="activator">
+                        <button type="button" class="user-chip" aria-label="打开用户菜单">
+                            <MudAvatar Size="Size.Small" Color="Color.Primary" Class="user-avatar">
+                                @UserInitial
+                            </MudAvatar>
+                            <span class="user-chip-name">@DisplayName</span>
+                            <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small" Class="user-chip-caret ml-1" />
+                        </button>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <div class="user-menu-header">
+                            <MudText Typo="Typo.subtitle2" Class="user-menu-name">@DisplayName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@UserName</MudText>
+                        </div>
+                        <MudDivider Class="mb-1" />
+                        <MudMenuItem Icon="@Icons.Material.Filled.Settings" Href="/setting">个人设置</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="LogoutAsync">退出登录</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Href="/login" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Login">
+                    登录
+                </MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen"
+               ClipMode="DrawerClipMode.Always"
+               Elevation="0"
+               Breakpoint="Breakpoint.Md"
+               Class="app-drawer">
+        <div class="drawer-brand">
+            <div class="drawer-brand-badge">
+                <MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Small" />
+            </div>
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="drawer-brand-name">消息推送服务</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">统一消息网关</MudText>
+            </div>
+        </div>
+
+        <MudNavMenu Dense="true" Rounded="true" Margin="Margin.Dense" Class="app-nav px-3">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">概览</MudNavLink>
+
+            <MudNavGroup Title="消息" Icon="@Icons.Material.Filled.Forum" Expanded="true" Class="mt-2">
+                <MudNavLink Href="/message" Icon="@Icons.Material.Filled.Mail">消息列表</MudNavLink>
+                <MudNavLink Href="/editor" Icon="@Icons.Material.Filled.EditNote">编辑消息</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="通道与接入" Icon="@Icons.Material.Filled.Hub" Expanded="true" Class="mt-2">
+                <MudNavLink Href="/channel" Icon="@Icons.Material.Filled.AccountTree">推送通道</MudNavLink>
+                <MudNavLink Href="/webhook" Icon="@Icons.Material.Filled.Webhook">Webhook</MudNavLink>
+            </MudNavGroup>
+
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <MudNavGroup Title="管理" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true" Class="mt-2">
+                        <MudNavLink Href="/user" Icon="@Icons.Material.Filled.People">用户管理</MudNavLink>
+                    </MudNavGroup>
+                </Authorized>
+            </AuthorizeView>
+
+            <MudNavGroup Title="系统" Icon="@Icons.Material.Filled.Tune" Expanded="true" Class="mt-2">
+                <MudNavLink Href="/setting" Icon="@Icons.Material.Filled.Settings">系统设置</MudNavLink>
+                <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">关于</MudNavLink>
+            </MudNavGroup>
+        </MudNavMenu>
+
+        @if (_status is not null)
+        {
+            <div class="drawer-footer">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">v @_status.Version</MudText>
+            </div>
+        }
+    </MudDrawer>
+
+    <MudMainContent>
+        <div class="page-container">
+            @Body
+        </div>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    发生未处理错误。
+    <a href="." class="reload">刷新</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _drawerOpen = true;
+    private StatusInfo? _status;
+
+    private string? DisplayName => Auth.User?.DisplayName;
+    private string? UserName => Auth.User?.Username;
+
+    private string UserInitial =>
+        string.IsNullOrWhiteSpace(DisplayName)
+            ? "?"
+            : DisplayName.Trim()[..1].ToUpperInvariant();
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth.User is null)
+        {
+            var self = await Api.SelfAsync();
+            if (self.Success && self.Data is not null)
+                Auth.SignIn(self.Data);
+        }
+        var status = await Api.StatusAsync();
+        if (status.Success && status.Data is not null)
+            _status = status.Data;
+    }
+
+    private async Task LogoutAsync()
+    {
+        await Api.LogoutAsync();
+        Auth.SignOut();
+        Snackbar.Add("已退出登录", Severity.Success);
+        Nav.NavigateTo("/login");
+    }
+}

@@ -1,0 +1,20 @@
+@page "/webhook"
+@page "/webhook/add"
+@page "/webhook/edit/{Id:int}"
+@attribute [Authorize]
+
+<PageTitle>Webhook · 消息推送服务</PageTitle>
+
+<PageHeader Title="Webhook 接口"
+            Description="为外部系统生成接收地址，并配置消息路由与转发规则"
+            Icon="@Icons.Material.Filled.Webhook" />
+
+<ComingSoon Class="mt-4"
+            Title="Webhook 接入"
+            Description="创建独立的接收 URL，将外部系统的请求按规则路由到指定通道，支持签名校验与默认模板。"
+            Icon="@Icons.Material.Filled.Webhook"
+            Features="@(new[] { "独立 URL", "路由规则", "签名校验", "默认模板" })" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+}

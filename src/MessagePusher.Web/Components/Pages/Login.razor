@@ -1,0 +1,80 @@
+@page "/login"
+@layout LoginLayout
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>登录 · 消息推送服务</PageTitle>
+
+<div class="login-screen">
+    <MudPaper Class="login-card" Elevation="24">
+        <MudGrid Spacing="0">
+            <MudItem xs="12" md="5">
+                <div class="login-brand">
+                    <img src="logo.png" alt="logo" class="login-logo" />
+                    <MudText Typo="Typo.h4" Class="mt-6" Style="font-weight:600;">消息推送服务</MudText>
+                    <MudText Typo="Typo.subtitle1" Class="mt-3 login-brand-muted">
+                        统一消息网关 · 16 种通道
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mt-6 login-brand-muted">
+                        将邮件、微信、飞书、钉钉、Telegram 等渠道收拢到一个控制台。
+                    </MudText>
+                </div>
+            </MudItem>
+            <MudItem xs="12" md="7">
+                <div class="login-form">
+                    <MudText Typo="Typo.h5" Style="font-weight:600;">登录控制台</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-6">请使用管理员或用户账号继续</MudText>
+                    @if (_error is not null)
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _error = null">
+                            @_error
+                        </MudAlert>
+                    }
+                    <MudForm @ref="_form">
+                        <MudTextField @bind-Value="_username"
+                                      Label="用户名"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.PersonOutline"
+                                      Required="true"
+                                      RequiredError="请输入用户名"
+                                      AutoFocus="true"
+                                      Class="mb-3" />
+                        <MudTextField @bind-Value="_password"
+                                      Label="密码"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      InputType="@_passwordInput"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@_passwordIcon"
+                                      OnAdornmentClick="TogglePassword"
+                                      AdornmentAriaLabel="显示或隐藏密码"
+                                      Required="true"
+                                      RequiredError="请输入密码"
+                                      Immediate="true"
+                                      OnKeyDown="OnPasswordKeyDown" />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Size="Size.Large"
+                                   FullWidth="true"
+                                   Class="mt-6"
+                                   Disabled="_busy"
+                                   StartIcon="@(_busy ? null : Icons.Material.Filled.Login)"
+                                   OnClick="SubmitAsync">
+                            @if (_busy)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            登录
+                        </MudButton>
+                    </MudForm>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-8 d-block" Align="Align.Center">
+                        消息推送服务控制台
+                    </MudText>
+                </div>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</div>

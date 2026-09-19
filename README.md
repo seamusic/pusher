@@ -249,13 +249,15 @@ dotnet restore
 dotnet build
 dotnet test
 dotnet run --project src/MessagePusher.Api
+dotnet run --project src/MessagePusher.Web
 ```
 
-- 健康检查：`GET /health`、`GET /ready`
-- Development 下 Swagger UI：http://localhost:3000/swagger （生产环境不启用）
-- 不要在 WSL 与 Windows 之间共用 `bin/`、`obj/`。换系统编译前删掉再 `dotnet restore`。
+- API：http://localhost:3000 （健康检查 `/health`、`/ready`；Development 下 Swagger `/swagger`）
+- Blazor 控制台（MudBlazor）：http://localhost:5100 ，通过 HTTP 调用 API（`Api:BaseUrl`）
+- 原 React SPA 仍由 API 的 `wwwroot` 托管；Blazor 项目为独立后台，页面将逐步迁移
+- 不要在 WSL 与 Windows 之间共用 `bin/`、`obj/`。换系统编译前删掉再 `dotnet restore`
 
-`launchSettings.json` 默认 `http://localhost:3000`、`ASPNETCORE_ENVIRONMENT=Development`。
+`MessagePusher.Api` 的 `launchSettings.json` 默认端口 3000。
 
 ## 文档
 

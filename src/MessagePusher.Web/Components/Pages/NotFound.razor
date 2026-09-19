@@ -1,0 +1,50 @@
+﻿@page "/not-found"
+@layout MainLayout
+
+<PageTitle>页面不存在 · 消息推送服务</PageTitle>
+
+<div class="not-found">
+    <MudText Typo="Typo.h2" Class="not-found-code">404</MudText>
+    <MudText Typo="Typo.h6" Class="not-found-title">页面不存在或已被移除</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary not-found-desc">
+        请检查地址是否输入正确，或返回首页继续浏览。
+    </MudText>
+    <div class="d-flex gap-4 mt-8">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Home" Href="/">
+            返回首页
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.History" Href="javascript:history.back()">
+            返回上一页
+        </MudButton>
+    </div>
+</div>
+
+<style>
+    .not-found {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 80px 24px;
+    }
+
+    .not-found-code {
+        font-weight: 800;
+        font-size: 5rem;
+        line-height: 1;
+        background: linear-gradient(135deg, #0F766E, #134E4A);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .not-found-title {
+        margin-top: 12px;
+        font-weight: 600;
+    }
+
+    .not-found-desc {
+        max-width: 360px;
+        margin-top: 4px;
+    }
+</style>

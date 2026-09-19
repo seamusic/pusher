@@ -1,0 +1,14 @@
+@page "/setting"
+@attribute [Authorize]
+
+<PageTitle>系统设置 · 消息推送服务</PageTitle>
+
+<PageHeader Title="系统设置"
+            Description="个人资料、推送偏好与平台级参数配置"
+            Icon="@Icons.Material.Filled.Settings" />
+
+<ComingSoon Class="mt-4"
+            Title="设置中心"
+            Description="按「个人设置 / 推送设置 / 系统设置」分组管理配置项，修改后即时生效，管理员可调整平台级参数。"
+            Icon="@Icons.Material.Filled.Settings"
+            Features="@(new[] { "个人设置", "推送设置", "系统设置", "分组 Tabs" })" />

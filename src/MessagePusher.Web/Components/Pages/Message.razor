@@ -1,0 +1,14 @@
+@page "/message"
+@attribute [Authorize]
+
+<PageTitle>消息列表 · 消息推送服务</PageTitle>
+
+<PageHeader Title="消息列表"
+            Description="查询历史消息，支持搜索、筛选、重发与实时刷新"
+            Icon="@Icons.Material.Filled.Mail" />
+
+<ComingSoon Class="mt-4"
+            Title="消息中心"
+            Description="提供全量消息的检索、状态跟踪、失败重发与 SSE 实时推送刷新，帮助您随时掌握每条消息的投递情况。"
+            Icon="@Icons.Material.Filled.Mail"
+            Features="@(new[] { "多条件搜索", "状态筛选", "失败重发", "SSE 实时刷新" })" />

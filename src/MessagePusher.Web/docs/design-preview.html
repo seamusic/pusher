@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MessagePusher.Web 设计规范预览</title>
+<style>
+    :root {
+        --brand: #0F766E;
+        --brand-dark: #134E4A;
+        --brand-100: rgba(15,118,110,.12);
+        --bg: #F6F8F9;
+        --surface: #FFFFFF;
+        --line: #E5E7EB;
+        --text-1: #111827;
+        --text-2: #6B7280;
+        --radius: 10px;
+        --shadow: 0 6px 18px rgba(17,24,39,.07);
+        --info: #0284C7; --info-bg: rgba(2,132,199,.12);
+        --success: #16A34A; --success-bg: rgba(22,163,74,.12);
+        --warning: #D97706; --warning-bg: rgba(217,119,6,.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #EEF1F3; color: var(--text-1); font-size: 14px; line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+    }
+    .preview-tabs { display: flex; justify-content: center; gap: 8px; padding: 18px; flex-wrap: wrap; }
+    .preview-tabs button {
+        border: 1px solid var(--line); background: #fff; color: var(--text-2);
+        padding: 7px 18px; border-radius: 999px; cursor: pointer; font-size: 13px; transition: all .15s;
+    }
+    .preview-tabs button.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ===== 应用外壳 ===== */
+    .app { display: flex; min-height: 760px; background: var(--bg); border-radius: 14px; overflow: hidden; box-shadow: 0 10px 40px rgba(17,24,39,.12); max-width: 1280px; margin: 0 18px 40px; }
+    .sidebar { width: 248px; flex: none; background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); min-height: 60px; }
+    .brand-badge { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg,#0f766e,#134e4a); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+    .brand-name { font-weight: 600; font-size: 14px; }
+    .brand-sub { font-size: 12px; color: var(--text-2); }
+    nav { padding: 10px 12px; flex: 1; }
+    .nav-group-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--text-2); text-transform: uppercase; padding: 10px 12px 6px; }
+    .nav-link { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: #374151; text-decoration: none; margin: 2px 0; transition: background .12s; }
+    .nav-link:hover { background: var(--brand-100); }
+    .nav-link.active { background: var(--brand-100); color: var(--brand); font-weight: 600; }
+    .nav-ico { width: 20px; text-align: center; opacity: .85; }
+    .sidebar-footer { padding: 10px 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-2); text-align: right; }
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .topbar { height: 60px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 18px; }
+    .topbar-title { font-weight: 600; }
+    .spacer { flex: 1; }
+    .user-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid transparent; background: transparent; padding: 4px 10px 4px 4px; border-radius: 999px; cursor: pointer; }
+    .user-chip:hover { background: var(--brand-100); }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+    .content { padding: 24px 28px 48px; }
+
+    /* ===== 页头 ===== */
+    .page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .page-header-main { display: flex; align-items: center; gap: 14px; }
+    .page-header-icon { width: 44px; height: 44px; border-radius: 12px; background: var(--brand-100); color: var(--brand); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .page-header h1 { font-size: 22px; font-weight: 700; }
+    .page-header .desc { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+
+    /* ===== 统计卡片 ===== */
+    .grid { display: grid; gap: 12px; }
+    .stats { grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 1000px) { .stats { grid-template-columns: repeat(2,1fr); } }
+    .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; display: flex; align-items: center; gap: 16px; transition: all .2s; }
+    .stat-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+    .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+    .tone-primary { background: var(--brand-100); color: var(--brand); }
+    .tone-info { background: var(--info-bg); color: var(--info); }
+    .tone-success { background: var(--success-bg); color: var(--success); }
+    .tone-warning { background: var(--warning-bg); color: var(--warning); }
+    .stat-value { font-size: 22px; font-weight: 700; line-height: 1.2; }
+    .stat-label { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+
+    /* ===== 信息面板 ===== */
+    .panels { grid-template-columns: 7fr 5fr; margin-top: 12px; }
+    @media (max-width: 1000px) { .panels { grid-template-columns: 1fr; } }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
+    .panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-weight: 600; }
+    .panel-head .ico { color: var(--brand); }
+    .kv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 24px; }
+    .kv-item .k { color: var(--text-2); font-size: 13px; }
+    .kv-item .v { font-weight: 500; margin-top: 2px; }
+    .kv-item .v a { color: var(--brand); text-decoration: none; }
+    .quick-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .quick-item { border: 1px solid var(--line); border-radius: var(--radius); display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; transition: all .15s; background: #fff; }
+    .quick-item:hover { border-color: var(--brand); background: #F0FDFA; }
+    .quick-ico { border-radius: 10px; padding: 8px; font-size: 16px; }
+
+    /* ===== 占位组件 ===== */
+    .coming-soon { background: var(--surface); border: 1px dashed #D1D5DB; border-radius: var(--radius); padding: 56px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .cs-icon { width: 64px; height: 64px; border-radius: 16px; background: var(--brand-100); color: var(--brand); display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 16px; }
+    .cs-title { font-weight: 600; font-size: 16px; }
+    .cs-desc { color: var(--text-2); max-width: 480px; margin-top: 4px; }
+    .cs-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+    .cs-chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 12px; color: var(--text-2); }
+    .cs-tag { margin-top: 24px; background: var(--warning-bg); color: #B45309; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+
+    /* ===== 404 ===== */
+    .nf { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 90px 24px; }
+    .nf-code { font-size: 80px; font-weight: 800; line-height: 1; background: linear-gradient(135deg,#0F766E,#134E4A); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .nf-title { font-weight: 600; margin-top: 12px; }
+    .nf-desc { color: var(--text-2); margin-top: 4px; }
+    .nf-actions { display: flex; gap: 12px; margin-top: 32px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 20px; border-radius: var(--radius); cursor: pointer; font-size: 14px; border: 1px solid transparent; }
+    .btn-primary { background: var(--brand); color: #fff; }
+    .btn-text { background: transparent; color: #374151; }
+    .btn-text:hover { background: var(--brand-100); }
+
+    .note { max-width: 1280px; margin: 0 auto 8px; padding: 0 18px; color: var(--text-2); font-size: 13px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="preview-tabs">
+    <button class="active" data-screen="s-home">概览仪表盘</button>
+    <button data-screen="s-placeholder">功能页占位规范</button>
+    <button data-screen="s-404">404 页面</button>
+</div>
+<p class="note">以下为 MessagePusher.Web 改造后的设计规范预览（静态演示，实际效果以 MudBlazor 组件渲染为准）</p>
+
+<!-- ============ 屏幕 1：概览 ============ -->
+<div class="screen active" id="s-home">
+<div class="app">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-badge">⚡</div>
+            <div>
+                <div class="brand-name">消息推送服务</div>
+                <div class="brand-sub">统一消息网关</div>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-group-title">概览</div>
+            <a class="nav-link active" href="javascript:void(0)"><span class="nav-ico">▦</span>概览</a>
+            <div class="nav-group-title">消息</div>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">✉</span>消息列表</a>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">✎</span>编辑消息</a>
+            <div class="nav-group-title">通道与接入</div>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">⑃</span>推送通道</a>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">⚙</span>Webhook</a>
+            <div class="nav-group-title">管理</div>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">👥</span>用户管理</a>
+            <div class="nav-group-title">系统</div>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">⚙</span>系统设置</a>
+            <a class="nav-link" href="javascript:void(0)"><span class="nav-ico">ⓘ</span>关于</a>
+        </nav>
+        <div class="sidebar-footer">v 1.2.3</div>
+    </aside>
+    <div class="main">
+        <header class="topbar">
+            <span style="color:var(--text-2)">☰</span>
+            <span class="topbar-title">消息推送服务</span>
+            <span class="spacer"></span>
+            <div class="user-chip">
+                <div class="avatar">A</div>
+                <span>Admin</span>
+                <span style="color:var(--text-2)">▾</span>
+            </div>
+        </header>
+        <div class="content">
+            <div class="page-header">
+                <div class="page-header-main">
+                    <div class="page-header-icon">▦</div>
+                    <div>
+                        <h1>概览</h1>
+                        <div class="desc">系统运行状况与核心指标</div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid stats">
+                <div class="stat-card"><div class="stat-icon tone-primary">👥</div><div><div class="stat-value">128</div><div class="stat-label">注册用户</div></div></div>
+                <div class="stat-card"><div class="stat-icon tone-info">✉</div><div><div class="stat-value">36,420</div><div class="stat-label">累计消息</div></div></div>
+                <div class="stat-card"><div class="stat-icon tone-success">★</div><div><div class="stat-value">v1.2.3</div><div class="stat-label">当前版本</div></div></div>
+                <div class="stat-card"><div class="stat-icon tone-warning">⏱</div><div><div class="stat-value">3 天 4 小时</div><div class="stat-label">持续运行</div></div></div>
+            </div>
+            <div class="grid panels">
+                <div class="panel">
+                    <div class="panel-head"><span class="ico">ⓘ</span>系统信息</div>
+                    <div class="kv-grid">
+                        <div class="kv-item"><div class="k">系统名称</div><div class="v">MessagePusher</div></div>
+                        <div class="kv-item"><div class="k">服务地址</div><div class="v"><a href="javascript:void(0)">http://localhost:3000</a></div></div>
+                        <div class="kv-item"><div class="k">启动时间</div><div class="v">2026-09-16 16:20:00</div></div>
+                        <div class="kv-item"><div class="k">版本号</div><div class="v">1.2.3</div></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head"><span class="ico">⚡</span>快捷操作</div>
+                    <div class="quick-grid">
+                        <div class="quick-item"><span class="quick-ico tone-primary">✎</span>编辑消息</div>
+                        <div class="quick-item"><span class="quick-ico tone-info">⑃</span>管理通道</div>
+                        <div class="quick-item"><span class="quick-ico tone-success">⚙</span>Webhook</div>
+                        <div class="quick-item"><span class="quick-ico tone-warning">⚙</span>系统设置</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- ============ 屏幕 2：占位页 ============ -->
+<div class="screen" id="s-placeholder">
+<div class="app">
+    <div class="main" style="min-height:560px">
+        <header class="topbar">
+            <span style="color:var(--text-2)">☰</span>
+            <span class="topbar-title">消息推送服务</span>
+            <span class="spacer"></span>
+            <div class="user-chip"><div class="avatar">A</div><span>Admin</span><span style="color:var(--text-2)">▾</span></div>
+        </header>
+        <div class="content">
+            <div class="page-header">
+                <div class="page-header-main">
+                    <div class="page-header-icon" style="background:var(--info-bg);color:var(--info)">✉</div>
+                    <div>
+                        <h1>消息列表</h1>
+                        <div class="desc">查询历史消息，支持搜索、筛选、重发与实时刷新</div>
+                    </div>
+                </div>
+            </div>
+            <div class="coming-soon">
+                <div class="cs-icon">✉</div>
+                <div class="cs-title">消息中心</div>
+                <p class="cs-desc">提供全量消息的检索、状态跟踪、失败重发与 SSE 实时推送刷新，帮助您随时掌握每条消息的投递情况。</p>
+                <div class="cs-chips">
+                    <span class="cs-chip">多条件搜索</span>
+                    <span class="cs-chip">状态筛选</span>
+                    <span class="cs-chip">失败重发</span>
+                    <span class="cs-chip">SSE 实时刷新</span>
+                </div>
+                <span class="cs-tag">开发中</span>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- ============ 屏幕 3：404 ============ -->
+<div class="screen" id="s-404">
+<div class="app">
+    <div class="main" style="min-height:480px">
+        <div class="nf">
+            <div class="nf-code">404</div>
+            <div class="nf-title">页面不存在或已被移除</div>
+            <div class="nf-desc">请检查地址是否输入正确，或返回首页继续浏览。</div>
+            <div class="nf-actions">
+                <span class="btn btn-primary">⌂ 返回首页</span>
+                <span class="btn btn-text">↩ 返回上一页</span>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+    document.querySelectorAll('.preview-tabs button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.preview-tabs button').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active'); });
+            btn.classList.add('active');
+            document.getElementById(btn.dataset.screen).classList.add('active');
+        });
+    });
+</script>
+</body>
+</html>

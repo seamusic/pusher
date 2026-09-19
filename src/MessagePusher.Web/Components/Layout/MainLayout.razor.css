@@ -1,0 +1,157 @@
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }
+
+/* ===== AppBar ===== */
+.app-bar {
+    background-color: var(--mud-palette-surface);
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    color: var(--mud-palette-text-primary);
+    z-index: 1200;
+    gap: 4px;
+}
+
+.app-bar-logo {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    object-fit: contain;
+    flex: none;
+}
+
+.app-bar-title {
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+/* ===== 用户菜单触发器 ===== */
+.user-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px 4px 4px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+
+.user-chip:hover {
+    background-color: var(--mud-palette-action-hover);
+}
+
+.user-chip:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+.user-avatar {
+    font-weight: 600;
+}
+
+.user-chip-name {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .875rem;
+    color: var(--mud-palette-text-primary);
+}
+
+.user-chip-caret {
+    color: var(--mud-palette-text-secondary);
+}
+
+.user-menu-header {
+    padding: 8px 16px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-menu-name {
+    color: var(--mud-palette-text-primary);
+}
+
+/* ===== 抽屉 ===== */
+.app-drawer {
+    border-right: 1px solid var(--mud-palette-lines-default);
+}
+
+.drawer-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    min-height: 60px;
+}
+
+.drawer-brand-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    color: #fff;
+    background: linear-gradient(135deg, #0f766e, #134e4a);
+    flex: none;
+}
+
+.drawer-brand-name {
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--mud-palette-text-primary);
+}
+
+.app-nav ::deep .mud-nav-group-title {
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--mud-palette-text-secondary);
+}
+
+.drawer-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px 20px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    background-color: var(--mud-palette-surface);
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ===== 主内容区 ===== */
+.page-container {
+    padding: 24px 28px 48px;
+    margin: 0 auto;
+    max-width: 1360px;
+    width: 100%;
+}
+
+@media (max-width: 960px) {
+    .page-container {
+        padding: 16px 16px 40px;
+    }
+}

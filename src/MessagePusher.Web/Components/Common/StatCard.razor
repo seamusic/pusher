@@ -1,0 +1,80 @@
+﻿@* 统一统计卡片：数值 + 标签 + 彩色图标 *@
+<MudPaper Class="stat-card" Elevation="0">
+    <div class="stat-card-icon @ToneClass">
+        <MudIcon Icon="@Icon" Size="Size.Medium" />
+    </div>
+    <div class="stat-card-body">
+        <MudText Typo="Typo.h4" Class="stat-card-value">@Value</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary stat-card-label">@Label</MudText>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public StatTone Tone { get; set; } = StatTone.Primary;
+
+    private string ToneClass => Tone switch
+    {
+        StatTone.Primary => "tone-primary",
+        StatTone.Info => "tone-info",
+        StatTone.Success => "tone-success",
+        StatTone.Warning => "tone-warning",
+        _ => "tone-primary"
+    };
+
+    public enum StatTone
+    {
+        Primary,
+        Info,
+        Success,
+        Warning
+    }
+}
+
+<style>
+    .stat-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 20px 22px;
+        border: 1px solid var(--mud-palette-lines-default);
+        transition: box-shadow .2s ease, transform .2s ease;
+        height: 100%;
+    }
+
+    .stat-card:hover {
+        box-shadow: 0 6px 18px rgba(17, 24, 39, .07);
+        transform: translateY(-1px);
+    }
+
+    .stat-card-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        flex: none;
+    }
+
+    .stat-card-body {
+        min-width: 0;
+    }
+
+    .stat-card-value {
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--mud-palette-text-primary);
+    }
+
+    .stat-card-label {
+        margin-top: 2px;
+    }
+
+    .tone-primary { background: rgba(15, 118, 110, .12); color: #0F766E; }
+    .tone-info { background: rgba(2, 132, 199, .12); color: #0284C7; }
+    .tone-success { background: rgba(22, 163, 74, .12); color: #16A34A; }
+    .tone-warning { background: rgba(217, 119, 6, .12); color: #D97706; }
+</style>

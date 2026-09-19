@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+
+<MudThemeProvider Theme="@AppTheme.Current" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+@Body
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth.User is not null)
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
+        var self = await Api.SelfAsync();
+        if (self.Success && self.Data is not null)
+        {
+            Auth.SignIn(self.Data);
+            Nav.NavigateTo("/");
+        }
+    }
+}
