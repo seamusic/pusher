@@ -28,6 +28,11 @@ public static class ChannelType
     public const string ServerChan = "server_chan";
     public const string PushDeer = "pushdeer";
     public const string PushPlus = "push_plus";
+    public const string Ntfy = "ntfy";
+    public const string Gotify = "gotify";
+    public const string Pushover = "pushover";
+    public const string WxPusher = "wx_pusher";
+    public const string PushMe = "pushme";
     public const string None = "none";
 }
 
