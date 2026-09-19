@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MessagePusher.Api/MessagePusher.Api.csproj" />
+    <Project Path="src/MessagePusher.Application/MessagePusher.Application.csproj" />
+    <Project Path="src/MessagePusher.Domain/MessagePusher.Domain.csproj" />
+    <Project Path="src/MessagePusher.Infrastructure/MessagePusher.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MessagePusher.Api.IntegrationTests/MessagePusher.Api.IntegrationTests.csproj" />
+    <Project Path="tests/MessagePusher.Application.Tests/MessagePusher.Application.Tests.csproj" />
+    <Project Path="tests/MessagePusher.Domain.Tests/MessagePusher.Domain.Tests.csproj" />
+  </Folder>
+</Solution>
