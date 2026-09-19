@@ -340,6 +340,36 @@
             F("群组话题 topic", x => x.AccountId, (x, v) => x.AccountId = v, "留空为个人推送；发送时 To 可覆盖"),
             F("消息模板 template", x => x.Other, (x, v) => x.Other = v, "留空默认 html，可填 txt/json/markdown 等")
         ],
+        "ntfy" =>
+        [
+            F("topic 主题", x => x.AccountId, (x, v) => x.AccountId = v, "发布主题；发送时 To 可覆盖"),
+            F("Bearer Token", x => x.Secret, (x, v) => x.Secret = v, "可选，受保护 topic 才需要", true),
+            F("服务器地址", x => x.Url, (x, v) => x.Url = v, "留空用默认 https://ntfy.sh，自建填根地址"),
+            F("高级选项 JSON", x => x.Other, (x, v) => x.Other = v, "可含 priority(1~5)、tags", lines: 3)
+        ],
+        "gotify" =>
+        [
+            F("App Token", x => x.Secret, (x, v) => x.Secret = v, "Gotify 应用 Token（X-Gotify-Key）", true),
+            F("服务器地址", x => x.Url, (x, v) => x.Url = v, "必填，自建 Gotify 根地址，如 https://gotify.example.com"),
+            F("优先级 priority", x => x.Other, (x, v) => x.Other = v, "留空用服务端默认，整数 0~10")
+        ],
+        "pushover" =>
+        [
+            F("API Token/Key", x => x.Secret, (x, v) => x.Secret = v, "应用的 API Token", true),
+            F("User Key", x => x.AccountId, (x, v) => x.AccountId = v, "接收用户 User Key；发送时 To 可覆盖")
+        ],
+        "wx_pusher" =>
+        [
+            F("appToken", x => x.Secret, (x, v) => x.Secret = v, "WxPusher 应用 appToken（AT_ 开头）", true),
+            F("UID", x => x.AccountId, (x, v) => x.AccountId = v, "接收用户 UID，多个用 | 分隔；发送时 To 可覆盖"),
+            F("高级选项 JSON", x => x.Other, (x, v) => x.Other = v, "可含 contentType(1文本/2html/3markdown)、topicIds", lines: 3)
+        ],
+        "pushme" =>
+        [
+            F("push_key", x => x.Secret, (x, v) => x.Secret = v, "PushMe 持久 push_key", true),
+            F("服务地址", x => x.Url, (x, v) => x.Url = v, "留空用默认 https://push.i-i.me，自建填 HTTP API 根地址"),
+            F("消息类型", x => x.Other, (x, v) => x.Other = v, "", options: [("", "跟随服务端默认"), ("markdown", "Markdown"), ("text", "纯文本")])
+        ],
         _ => []
     };
 
@@ -355,6 +385,11 @@
         "server_chan" => "Turbo（SCT 开头）与 Server酱³（sctp 开头）SendKey 不通用，按 Key 自动路由。Turbo 免费 5 条/天，会员额度更高且有每分钟频率上限，以官网为准；Server酱³ 见 sc3.ft07.com/doc。开通与最新额度：sct.ftqq.com、sc3.ft07.com。",
         "pushdeer" => "PushKey 已绑定接收设备，为固定目标，不支持在此指定发送目标（群组中该子通道目标留空）。默认端点 api2.pushdeer.com，可自建。开通与文档：pushdeer.com。",
         "push_plus" => "code=200 表示请求受理成功、投递异步进行，不等于实际送达条数。未完成实名会返回 905 且无法发送；未实名额度受限、频率约 1 分钟 5 次，标题 ≤100 字、内容 ≤20000 字，会员额度以官网为准。文档：pushplus.plus。",
+        "ntfy" => "以 JSON 发往服务器根路径（非 /{topic}），默认 https://ntfy.sh，可自建。topic 为目标（AccountId），发送时 To 可覆盖；受保护 topic 需填 Bearer Token，公开 topic 可留空。链接映射到 click，priority 取 1~5。文档：docs.ntfy.sh。",
+        "gotify" => "自托管服务，无公有默认地址，服务器地址必填。App Token 绑定具体应用，为固定目标，不支持在此指定发送目标（群组中该子通道目标留空）。priority 取 0~10。文档：gotify.net。",
+        "pushover" => "Secret 为应用 API Token/Key，AccountId 为接收 User Key，发送时 To 可覆盖 user。客户端需购买或试用，API 每月额度以 pushover.net 为准；title ≤250、message ≤1024、url ≤512 字。status=1 为发送成功。",
+        "wx_pusher" => "标准模式：appToken + UID（AccountId，多个用 | 分隔）或高级选项 topicIds；contentType 1 文本/2 html/3 markdown。发送时 To 非空则仅用该 UID 列表且不附加默认 topicIds。code=1000 为受理，仍会检查逐目标失败明细。SPT 模式协议待核验，尚未开放。文档：wxpusher.zjiecode.com。",
+        "pushme" => "push_key 绑定接收端，为固定目标，不支持在此指定发送目标（群组中该子通道目标留空）。默认 https://push.i-i.me，可自建；type 支持 text/markdown。原生接口成功返回纯文本 success，其他文本视为错误。文档：push.i-i.me。",
         _ => "按页面提示填写通道凭证。敏感信息不会回显到已保存的密钥字段。"
     };
 }

@@ -99,6 +99,11 @@ public static class ChannelTypes
         ("server_chan", "Server酱"),
         ("pushdeer", "PushDeer"),
         ("push_plus", "PushPlus 推送加"),
+        ("ntfy", "ntfy"),
+        ("gotify", "Gotify"),
+        ("pushover", "Pushover"),
+        ("wx_pusher", "WxPusher"),
+        ("pushme", "PushMe"),
         ("none", "不推送")
     ];
 
