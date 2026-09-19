@@ -36,9 +36,14 @@ public sealed class ExceptionHandlingMiddleware
             context.Response.StatusCode = StatusCodes.Status200OK;
             await context.Response.WriteAsJsonAsync(ApiResult.Fail(ex.Message));
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "unhandled exception");
+            if (context.RequestAborted.IsCancellationRequested || context.Response.HasStarted)
+                return;
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsJsonAsync(ApiResult.Fail("内部服务器错误"));
         }

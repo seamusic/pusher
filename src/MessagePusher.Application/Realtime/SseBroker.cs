@@ -32,6 +32,12 @@ public sealed class SseBroker : ISseBroker
                 await responseStream.FlushAsync(ct);
             }
         }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (IOException)
+        {
+        }
         finally
         {
             lock (_lock)

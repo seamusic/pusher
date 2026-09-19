@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MessagePusher.Application.Json;
+using MessagePusher.Application.Realtime;
 using MessagePusher.Application.Results;
 using MessagePusher.Application.Services;
 using MessagePusher.Application.Channels;
@@ -60,5 +61,15 @@ public class BehaviorTests
     {
         var sign = DingProvider.DingSign("secret", 123);
         Assert.False(string.IsNullOrEmpty(sign));
+    }
+
+    [Fact]
+    public async Task SseBroker_subscribe_does_not_throw_when_cancelled()
+    {
+        var broker = new SseBroker();
+        using var ms = new MemoryStream();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await broker.SubscribeAsync(1, ms, cts.Token);
     }
 }
