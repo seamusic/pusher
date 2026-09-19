@@ -25,6 +25,9 @@ public static class ChannelType
     public const string Group = "group";
     public const string Custom = "custom";
     public const string TencentAlarm = "tencent_alarm";
+    public const string ServerChan = "server_chan";
+    public const string PushDeer = "pushdeer";
+    public const string PushPlus = "push_plus";
     public const string None = "none";
 }
 

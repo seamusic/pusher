@@ -49,8 +49,10 @@ public static class DependencyInjection
         services.AddSingleton<IChannelProvider, GroupProvider>();
         services.AddSingleton<IChannelProvider, CustomProvider>();
         services.AddSingleton<IChannelProvider, TencentAlarmProvider>();
+        services.AddSingleton<IChannelProvider, ServerChanProvider>();
         services.AddSingleton<IChannelProvider, NoneProvider>();
         services.AddSingleton<ChannelProviderFactory>();
+        services.AddSingleton<IChannelConfigValidator, ServerChanConfigValidator>();
         services.AddSingleton<ChannelConfigValidatorRegistry>();
 
         services.AddHttpClient("channels", c => c.Timeout = TimeSpan.FromSeconds(30));

@@ -96,6 +96,7 @@ public static class ChannelTypes
         ("custom", "自定义消息通道"),
         ("group", "群组消息"),
         ("tencent_alarm", "腾讯云消息告警"),
+        ("server_chan", "Server酱"),
         ("none", "不推送")
     ];
 

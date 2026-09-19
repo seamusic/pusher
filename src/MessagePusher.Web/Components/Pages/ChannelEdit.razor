@@ -322,6 +322,12 @@
             F("请求地址", x => x.Url, (x, v) => x.Url = v, "必须 HTTPS"),
             F("请求体 JSON", x => x.Other, (x, v) => x.Other = v, "支持 $title $description $content $url $to", lines: 8)
         ],
+        "server_chan" =>
+        [
+            F("SendKey", x => x.Secret, (x, v) => x.Secret = v, "Turbo 以 SCT 开头；Server酱³ 形如 sctp<uid>t<token>", true),
+            F("消息通道 channel", x => x.AccountId, (x, v) => x.AccountId = v, "仅 Turbo 可填，留空用默认；Server酱³ 必须留空"),
+            F("高级选项 JSON", x => x.Other, (x, v) => x.Other = v, "可含 short（两版本）、tags（仅 Server酱³）", lines: 3)
+        ],
         _ => []
     };
 
@@ -334,6 +340,7 @@
         "none" => "仅保存消息，不对外推送，需要具备消息持久化权限。",
         "custom" => "仅支持 HTTPS POST，请求体须为 JSON，可使用 $title、$description、$content、$url、$to。",
         "group" => "用 | 分隔子通道。目标数量需与通道数量一致，不需要指定的目标留空即可。",
+        "server_chan" => "Turbo（SCT 开头）与 Server酱³（sctp 开头）SendKey 不通用，按 Key 自动路由。Turbo 免费 5 条/天，会员额度更高且有每分钟频率上限，以官网为准；Server酱³ 见 sc3.ft07.com/doc。开通与最新额度：sct.ftqq.com、sc3.ft07.com。",
         _ => "按页面提示填写通道凭证。敏感信息不会回显到已保存的密钥字段。"
     };
 }

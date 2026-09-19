@@ -3,12 +3,42 @@ using System.Text.Json;
 using MessagePusher.Application.Abstractions;
 using MessagePusher.Application.Json;
 using MessagePusher.Domain;
+using MessagePusher.Domain.Entities;
 using MessagePusher.Domain.Exceptions;
 
 namespace MessagePusher.Application.Channels;
 
 internal static class HttpChannelHelpers
 {
+    // 正文 fallback：Content 为空时用 Description；随后追加 Url（已包含则不重复追加），不修改输入消息。
+    public static string ComposeBody(Message message)
+    {
+        var body = string.IsNullOrEmpty(message.Content) ? message.Description : message.Content;
+        var url = message.Url;
+        if (!string.IsNullOrEmpty(url) && !body.Contains(url, StringComparison.Ordinal))
+            body = string.IsNullOrEmpty(body) ? url : body + "\n\n" + url;
+        return body;
+    }
+
+    // 按 Unicode 文本元素（字素簇）边界截断，绝不切断代理项/组合字符；已短于上限时原样返回。
+    public static string TruncateUnicode(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text;
+        var sb = new StringBuilder();
+        var used = 0;
+        var e = System.Globalization.StringInfo.GetTextElementEnumerator(text);
+        while (e.MoveNext())
+        {
+            var element = e.GetTextElement();
+            if (used + element.Length > maxLength)
+                break;
+            sb.Append(element);
+            used += element.Length;
+        }
+        return sb.ToString();
+    }
+
     // options 缺省保持 JsonDefaults（对外 API snake_case 契约）；新 JSON 通道显式传入 OutboundJson.Options。
     public static async Task<T?> PostJsonAsync<T>(HttpClient client, string url, object body, CancellationToken ct, JsonSerializerOptions? options = null)
     {
