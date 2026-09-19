@@ -9,21 +9,25 @@ namespace MessagePusher.Application.Channels;
 
 internal static class HttpChannelHelpers
 {
-    public static async Task<T?> PostJsonAsync<T>(HttpClient client, string url, object body, CancellationToken ct)
+    // options 缺省保持 JsonDefaults（对外 API snake_case 契约）；新 JSON 通道显式传入 OutboundJson.Options。
+    public static async Task<T?> PostJsonAsync<T>(HttpClient client, string url, object body, CancellationToken ct, JsonSerializerOptions? options = null)
     {
-        var json = JsonSerializer.Serialize(body, JsonDefaults.Options);
+        var json = JsonSerializer.Serialize(body, options ?? JsonDefaults.Options);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var resp = await client.PostAsync(url, content, ct);
         var text = await resp.Content.ReadAsStringAsync(ct);
         if (string.IsNullOrWhiteSpace(text))
             return default;
-        return JsonSerializer.Deserialize<T>(text, JsonDefaults.Options);
+        return JsonSerializer.Deserialize<T>(text, options ?? JsonDefaults.Options);
     }
 
+    public static StringContent JsonContent(object body, JsonSerializerOptions? options = null) =>
+        new(JsonSerializer.Serialize(body, options ?? JsonDefaults.Options), Encoding.UTF8, "application/json");
+
     // 所有权：读取失败时由本方法释放 resp；正常返回后由调用方释放 resp。
-    public static async Task<(HttpResponseMessage resp, string body)> PostRawAsync(HttpClient client, string url, object body, CancellationToken ct, Dictionary<string, string>? headers = null)
+    public static async Task<(HttpResponseMessage resp, string body)> PostRawAsync(HttpClient client, string url, object body, CancellationToken ct, Dictionary<string, string>? headers = null, JsonSerializerOptions? options = null)
     {
-        var json = body as string ?? JsonSerializer.Serialize(body, JsonDefaults.Options);
+        var json = body as string ?? JsonSerializer.Serialize(body, options ?? JsonDefaults.Options);
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Content = new StringContent(json, Encoding.UTF8, "application/json");
         if (headers is not null)
