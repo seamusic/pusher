@@ -155,13 +155,7 @@ public sealed class CustomProvider : IChannelProvider
     public async Task SendAsync(Message message, User user, Channel channel, CancellationToken ct)
     {
         var url = channel.Url;
-        var allowHttp = string.Equals(Environment.GetEnvironmentVariable("CHANNEL_URL_ALLOW_NON_HTTPS"), "true", StringComparison.OrdinalIgnoreCase)
-                        || _options.GetBool("ChannelUrlAllowNonHttps");
-        if (url.StartsWith("http:", StringComparison.OrdinalIgnoreCase) && !allowHttp)
-            throw new BusinessException("自定义通道必须使用 HTTPS 协议");
-        var server = _options.Get("ServerAddress", AppDefaults.ServerAddress);
-        if (url.StartsWith(server, StringComparison.OrdinalIgnoreCase))
-            throw new BusinessException("自定义通道不能使用本服务地址");
+        OutboundUrlPolicy.Validate(url, _options, "自定义通道");
 
         var template = channel.Other;
         template = QuoteReplace(template, "$url", message.Url);
