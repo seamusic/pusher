@@ -27,8 +27,12 @@ internal static class WxPusherOptions
             var root = doc.RootElement;
 
             var mode = ModeStandard;
-            if (root.TryGetProperty("mode", out var m) && m.ValueKind == JsonValueKind.String)
+            if (root.TryGetProperty("mode", out var m))
+            {
+                if (m.ValueKind != JsonValueKind.String)
+                    throw new BusinessException("WxPusher mode 必须是字符串");
                 mode = string.IsNullOrWhiteSpace(m.GetString()) ? ModeStandard : m.GetString()!.Trim().ToLowerInvariant();
+            }
 
             int? contentType = null;
             if (root.TryGetProperty("contentType", out var ct))
@@ -75,7 +79,7 @@ public sealed class WxPusherProvider : IChannelProvider
 {
     // 固定官方端点，JSON POST。依据 wxpusher.zjiecode.com/docs：
     // 请求 {appToken,content,summary,contentType,uids,topicIds,url}，成功 code==1000；
-    // 顶层成功不等于全部目标送达，需检查 data.fails 部分失败明细。
+    // 顶层成功不等于全部目标受理，需检查 data 数组中每个目标的 code/status。
     internal const string SendUrl = "https://wxpusher.zjiecode.com/api/send/message";
     private const int SummaryMaxLength = 99;
     private readonly IHttpClientFactory _http;
@@ -89,6 +93,7 @@ public sealed class WxPusherProvider : IChannelProvider
             throw new BusinessException("WxPusher SPT 模式协议待核验，尚未开放，请使用标准模式（appToken + UID/topicIds）");
         if (mode != WxPusherOptions.ModeStandard)
             throw new BusinessException($"WxPusher 不支持的模式：{mode}");
+        WxPusherOptions.ValidateContentType(contentType);
 
         // To 非空时仅使用该 UID 列表，且不附加配置 topicIds，避免定向发送仍广播到默认主题。
         string[] uids;
@@ -123,14 +128,22 @@ public sealed class WxPusherProvider : IChannelProvider
             HttpChannelHelpers.JsonContent(request, OutboundJson.Options), "WxPusher", ct, sensitiveValues: [channel.Secret]);
         if (string.IsNullOrWhiteSpace(body))
             throw new BusinessException("WxPusher 返回空响应");
-        var res = JsonSerializer.Deserialize<WxPusherResponse>(body, OutboundJson.Options);
-        if (res is null || res.Code != 1000)
-            throw new BusinessException(string.IsNullOrEmpty(res?.Msg) ? "WxPusher 发送失败" : $"WxPusher 发送失败：{res!.Msg}");
+        var res = HttpChannelHelpers.ParseResponse<WxPusherResponse>(body, "WxPusher");
+        if (res.Code != 1000 || res.Success == false)
+            throw HttpChannelHelpers.BusinessFailure("WxPusher", res.Msg, channel.Secret);
 
-        // 顶层 code==1000 后再检查逐目标结果，部分失败不能被顶层成功覆盖。
-        var fails = res.ExtractFails();
-        if (fails.Count > 0)
-            throw new BusinessException($"WxPusher 部分目标发送失败（{fails.Count}）：{string.Join("; ", fails)}");
+        // 官方协议：https://github.com/wxpusher/wxpusher-docs#http接口说明
+        // data 是逐 UID/topicId 的结果数组；缺少结果或业务码不能当成成功。
+        if (res.Data is not { Length: > 0 } || res.Data.Any(item => item is null || item.Code is null
+                || (string.IsNullOrWhiteSpace(item.Uid) && item.TopicId is null)))
+            throw new BusinessException("WxPusher 响应缺少有效的逐目标发送结果");
+
+        var fails = res.Data.Where(item => item!.Code != 1000)
+            .Select(item => $"{(string.IsNullOrWhiteSpace(item!.Uid) ? $"topic:{item.TopicId}" : item.Uid)}：{item.Status ?? "目标受理失败"}")
+            .ToArray();
+        if (fails.Length > 0)
+            throw HttpChannelHelpers.BusinessFailure("WxPusher",
+                $"部分目标发送失败（{fails.Length}）：{string.Join("; ", fails)}", channel.Secret);
     }
 }
 
@@ -151,35 +164,16 @@ public sealed class WxPusherResponse
 {
     [JsonPropertyName("code")] public int Code { get; set; }
     [JsonPropertyName("msg")] public string? Msg { get; set; }
-    [JsonPropertyName("success")] public bool Success { get; set; }
-    [JsonPropertyName("data")] public JsonElement Data { get; set; }
+    [JsonPropertyName("success")] public bool? Success { get; set; }
+    [JsonPropertyName("data")] public WxPusherTargetResult?[]? Data { get; set; }
+}
 
-    // data 结构未获官方逐字段固化，防御式提取失败明细：识别 fails 数组（对象含 uid/reason 或纯字符串）。
-    public List<string> ExtractFails()
-    {
-        var result = new List<string>();
-        if (Data.ValueKind != JsonValueKind.Object || !Data.TryGetProperty("fails", out var fails))
-            return result;
-        if (fails.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in fails.EnumerateArray())
-            {
-                if (item.ValueKind == JsonValueKind.String)
-                    result.Add(item.GetString() ?? "");
-                else if (item.ValueKind == JsonValueKind.Object)
-                {
-                    var uid = item.TryGetProperty("uid", out var u) ? u.GetString() : null;
-                    var reason = item.TryGetProperty("reason", out var r) ? r.GetString() : null;
-                    result.Add(string.IsNullOrEmpty(uid) ? (reason ?? "未知目标") : $"{uid}:{reason}");
-                }
-            }
-        }
-        else if (fails.ValueKind == JsonValueKind.Number && fails.TryGetInt32(out var n) && n > 0)
-        {
-            result.Add($"失败 {n} 个目标");
-        }
-        return result;
-    }
+public sealed class WxPusherTargetResult
+{
+    [JsonPropertyName("uid")] public string? Uid { get; set; }
+    [JsonPropertyName("topicId")] public long? TopicId { get; set; }
+    [JsonPropertyName("code")] public int? Code { get; set; }
+    [JsonPropertyName("status")] public string? Status { get; set; }
 }
 
 public sealed class WxPusherConfigValidator : IChannelConfigValidator

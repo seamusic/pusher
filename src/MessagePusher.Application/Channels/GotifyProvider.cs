@@ -42,13 +42,11 @@ public sealed class GotifyProvider : IChannelProvider
             HttpChannelHelpers.JsonContent(request, OutboundJson.Options), "Gotify", ct, headers, sensitiveValues: [channel.Secret]);
         if (string.IsNullOrWhiteSpace(body))
             throw new BusinessException("Gotify 返回空响应");
-        var res = JsonSerializer.Deserialize<GotifyResponse>(body, OutboundJson.Options);
+        var res = HttpChannelHelpers.ParseResponse<GotifyResponse>(body, "Gotify");
         // 成功判定依据 Gotify 自身消息对象（id>0），不套用其他服务的 code 模型。
-        if (res is null || res.Id <= 0)
-        {
-            var err = res is null ? null : (res.ErrorDescription ?? res.Error);
-            throw new BusinessException(string.IsNullOrEmpty(err) ? "Gotify 发送失败：响应不是有效的消息对象" : $"Gotify 发送失败：{err}");
-        }
+        if (res.Id <= 0 || !string.IsNullOrEmpty(res.Error) || !string.IsNullOrEmpty(res.ErrorDescription))
+            throw HttpChannelHelpers.BusinessFailure("Gotify",
+                res.ErrorDescription ?? res.Error ?? "响应不是有效的消息对象", channel.Secret);
     }
 }
 

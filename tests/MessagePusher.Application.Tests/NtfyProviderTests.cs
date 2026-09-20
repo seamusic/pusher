@@ -181,7 +181,7 @@ public class NtfyProviderTests
     [Fact]
     public async Task Success_requires_message_object()
     {
-        var (provider, _) = Create(() => CapturingHandler.Ok("{\"id\":\"x\"}"));
+        var (provider, _) = Create(() => CapturingHandler.Ok("{\"id\":\"x\",\"event\":\"message\"}"));
         await provider.SendAsync(new Message { Title = "T" }, User(), Ch(), CancellationToken.None);
     }
 

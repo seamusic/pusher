@@ -112,15 +112,15 @@ public sealed class ServerChanProvider : IChannelProvider
             new FormUrlEncodedContent(fields), "Server酱", ct, sensitiveValues: [sendKey]);
         if (string.IsNullOrWhiteSpace(body))
             throw new BusinessException("Server酱 返回空响应");
-        var res = JsonSerializer.Deserialize<ServerChanResponse>(body, OutboundJson.Options);
-        if (res is null || res.Code != 0)
-            throw new BusinessException(string.IsNullOrEmpty(res?.Message) ? "Server酱 发送失败" : $"Server酱 发送失败：{res!.Message}");
+        var res = HttpChannelHelpers.ParseResponse<ServerChanResponse>(body, "Server酱");
+        if (res.Code != 0)
+            throw HttpChannelHelpers.BusinessFailure("Server酱", res.Message, sendKey);
     }
 }
 
 public sealed class ServerChanResponse
 {
-    [JsonPropertyName("code")] public int Code { get; set; }
+    [JsonPropertyName("code")] public int? Code { get; set; }
     [JsonPropertyName("message")] public string? Message { get; set; }
 }
 

@@ -37,11 +37,9 @@ public sealed partial class PushPlusProvider : IChannelProvider
             HttpChannelHelpers.JsonContent(request, OutboundJson.Options), "PushPlus", ct, sensitiveValues: [channel.Secret]);
         if (string.IsNullOrWhiteSpace(body))
             throw new BusinessException("PushPlus 返回空响应");
-        var res = JsonSerializer.Deserialize<PushPlusResponse>(body, OutboundJson.Options);
-        if (res is null || res.Code != 200)
-            throw new BusinessException(res is null
-                ? "PushPlus 发送失败"
-                : $"PushPlus 发送失败：code={res.Code}{(string.IsNullOrEmpty(res.Msg) ? "" : " " + res.Msg)}");
+        var res = HttpChannelHelpers.ParseResponse<PushPlusResponse>(body, "PushPlus");
+        if (res.Code != 200)
+            throw HttpChannelHelpers.BusinessFailure("PushPlus", $"code={res.Code} {res.Msg}", channel.Secret);
     }
 }
 

@@ -11,7 +11,7 @@ namespace MessagePusher.Application.Tests;
 
 public class WxPusherProviderTests
 {
-    private const string SuccessJson = "{\"code\":1000,\"msg\":\"处理成功\",\"data\":{\"successUids\":[\"UID_1\"],\"fails\":[]},\"success\":true}";
+    private const string SuccessJson = "{\"code\":1000,\"msg\":\"处理成功\",\"data\":[{\"uid\":\"UID_1\",\"code\":1000,\"status\":\"创建发送任务成功\"}],\"success\":true}";
 
     private sealed class CapturingHandler : HttpMessageHandler
     {
@@ -148,10 +148,10 @@ public class WxPusherProviderTests
     }
 
     [Fact]
-    public async Task Partial_failure_in_data_fails_not_masked_by_top_level_success()
+    public async Task Partial_failure_in_data_array_not_masked_by_top_level_success()
     {
         var (provider, _) = Create(() => CapturingHandler.Ok(
-            "{\"code\":1000,\"msg\":\"处理成功\",\"data\":{\"successUids\":[\"UID_1\"],\"fails\":[{\"uid\":\"UID_2\",\"reason\":\"未关注\"}]},\"success\":true}"));
+            "{\"code\":1000,\"msg\":\"处理成功\",\"data\":[{\"uid\":\"UID_1\",\"code\":1000},{\"uid\":\"UID_2\",\"code\":1001,\"status\":\"未关注\"}],\"success\":true}"));
         var ex = await Assert.ThrowsAsync<BusinessException>(() =>
             provider.SendAsync(new Message { Title = "T" }, User(), Ch(), CancellationToken.None));
         Assert.Contains("部分目标发送失败", ex.Message);

@@ -40,12 +40,7 @@ public sealed class PushMeProvider : IChannelProvider
             new FormUrlEncodedContent(fields), "PushMe", ct, sensitiveValues: [channel.Secret]);
         // HTTP 状态通过后，按原生纯文本协议判断：仅 "success" 为成功，其余文本原样作为错误回显（脱敏）。
         if (!string.Equals(body.Trim(), "success", StringComparison.OrdinalIgnoreCase))
-        {
-            var err = SecretMask.Redact(HttpChannelHelpers.StripToPlainText(body), channel.Secret);
-            if (err.Length > 200)
-                err = err[..200] + "…";
-            throw new BusinessException(string.IsNullOrWhiteSpace(err) ? "PushMe 发送失败" : $"PushMe 发送失败：{err}");
-        }
+            throw HttpChannelHelpers.BusinessFailure("PushMe", body, channel.Secret);
     }
 }
 

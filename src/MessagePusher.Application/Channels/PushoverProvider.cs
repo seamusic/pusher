@@ -45,11 +45,11 @@ public sealed class PushoverProvider : IChannelProvider
             new FormUrlEncodedContent(fields), "Pushover", ct, sensitiveValues: [channel.Secret, userKey]);
         if (string.IsNullOrWhiteSpace(text))
             throw new BusinessException("Pushover 返回空响应");
-        var res = JsonSerializer.Deserialize<PushoverResponse>(text, OutboundJson.Options);
-        if (res is null || res.Status != 1)
+        var res = HttpChannelHelpers.ParseResponse<PushoverResponse>(text, "Pushover");
+        if (res.Status != 1 || res.Errors is { Length: > 0 })
         {
-            var err = res?.Errors is { Length: > 0 } e ? string.Join("; ", e) : null;
-            throw new BusinessException(string.IsNullOrEmpty(err) ? "Pushover 发送失败" : $"Pushover 发送失败：{err}");
+            var err = res.Errors is { Length: > 0 } e ? string.Join("; ", e) : null;
+            throw HttpChannelHelpers.BusinessFailure("Pushover", err, channel.Secret, userKey);
         }
     }
 }

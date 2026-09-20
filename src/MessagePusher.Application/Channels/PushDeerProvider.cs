@@ -45,9 +45,9 @@ public sealed class PushDeerProvider : IChannelProvider
             new FormUrlEncodedContent(fields), "PushDeer", ct, sensitiveValues: [channel.Secret]);
         if (string.IsNullOrWhiteSpace(body))
             throw new BusinessException("PushDeer 返回空响应");
-        var res = JsonSerializer.Deserialize<PushDeerResponse>(body, OutboundJson.Options);
-        if (res is null || !res.IsSuccess)
-            throw new BusinessException(string.IsNullOrEmpty(res?.ErrorText) ? "PushDeer 发送失败" : $"PushDeer 发送失败：{res!.ErrorText}");
+        var res = HttpChannelHelpers.ParseResponse<PushDeerResponse>(body, "PushDeer");
+        if (!res.IsSuccess)
+            throw HttpChannelHelpers.BusinessFailure("PushDeer", res.ErrorText, channel.Secret);
     }
 }
 

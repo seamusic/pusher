@@ -36,9 +36,15 @@ internal static class NtfyOptions
                 if (t.ValueKind == JsonValueKind.String)
                     tags.AddRange((t.GetString() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                 else if (t.ValueKind == JsonValueKind.Array)
+                {
                     foreach (var item in t.EnumerateArray())
-                        if (item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
+                    {
+                        if (item.ValueKind != JsonValueKind.String)
+                            throw new BusinessException("ntfy tags 数组元素必须是字符串");
+                        if (!string.IsNullOrWhiteSpace(item.GetString()))
                             tags.Add(item.GetString()!.Trim());
+                    }
+                }
                 else
                     throw new BusinessException("ntfy tags 必须是字符串或字符串数组");
             }
@@ -84,6 +90,7 @@ public sealed class NtfyProvider : IChannelProvider
         OutboundUrlPolicy.Validate(server, _options, "ntfy");
 
         var (priority, tags) = NtfyOptions.Parse(channel.Other);
+        NtfyOptions.ValidatePriority(priority);
         // click 承载链接，正文不再追加 Url；message 用 Content 空则 Description 的纯 fallback。
         var body = string.IsNullOrEmpty(message.Content) ? message.Description : message.Content;
         var request = new NtfyRequest
@@ -104,13 +111,10 @@ public sealed class NtfyProvider : IChannelProvider
             HttpChannelHelpers.JsonContent(request, OutboundJson.Options), "ntfy", ct, headers, sensitiveValues: [channel.Secret]);
         if (string.IsNullOrWhiteSpace(text))
             throw new BusinessException("ntfy 返回空响应");
-        var res = JsonSerializer.Deserialize<NtfyResponse>(text, OutboundJson.Options);
+        var res = HttpChannelHelpers.ParseResponse<NtfyResponse>(text, "ntfy");
         // 成功判定依据消息对象结构（id/event=message），而非通用 code==0/200。
-        if (res is null || (string.IsNullOrEmpty(res.Id) && res.Event != "message"))
-        {
-            var err = res?.Error;
-            throw new BusinessException(string.IsNullOrEmpty(err) ? "ntfy 发送失败：响应不是有效的消息对象" : $"ntfy 发送失败：{err}");
-        }
+        if (string.IsNullOrWhiteSpace(res.Id) || res.Event != "message" || !string.IsNullOrEmpty(res.Error))
+            throw HttpChannelHelpers.BusinessFailure("ntfy", res.Error ?? "响应不是有效的消息对象", channel.Secret);
     }
 }
 
