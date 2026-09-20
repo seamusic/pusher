@@ -25,7 +25,8 @@ public sealed class AsyncMessageWorker : BackgroundService
     {
         // 回灌与消费必须同时推进：有界队列（128、Wait）下先回灌后消费会在
         // 待恢复消息超过容量时永久等待空位。
-        var replay = Task.Run(() => LoadPendingAsync(stoppingToken), CancellationToken.None);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var replay = Task.Run(() => ReplayPendingAsync(lifetime.Token), CancellationToken.None);
 
         try
         {
@@ -35,6 +36,10 @@ public sealed class AsyncMessageWorker : BackgroundService
                 {
                     await ProcessAsync(id, stoppingToken);
                 }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "async message sender error");
@@ -43,18 +48,25 @@ public sealed class AsyncMessageWorker : BackgroundService
         }
         finally
         {
-            try
-            {
-                await replay;
-            }
-            catch (OperationCanceledException)
-            {
-                // 停机取消回灌属正常路径
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "async message replay error");
-            }
+            await lifetime.CancelAsync();
+            await replay;
+        }
+    }
+
+    private async Task ReplayPendingAsync(CancellationToken ct)
+    {
+        try
+        {
+            await LoadPendingAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 停机取消属于正常路径。
+        }
+        catch (Exception ex)
+        {
+            // 运行期间立即观察回灌失败，不能等消费循环退出时才报告。
+            _logger.LogError(ex, "async message replay error");
         }
     }
 
@@ -82,6 +94,11 @@ public sealed class AsyncMessageWorker : BackgroundService
             return;
         }
 
+        // 单消费者下，实时入队和恢复快照可能包含同一 ID，跳过已处理项。
+        // 不扩展为跨进程严格一次投递保证。
+        if (message.Status != (int)MessageSendStatus.AsyncPending)
+            return;
+
         var status = (int)MessageSendStatus.Failed;
         try
         {
@@ -91,6 +108,10 @@ public sealed class AsyncMessageWorker : BackgroundService
                           ?? throw new InvalidOperationException("channel not found");
             await factory.Resolve(channel.Type).SendAsync(message, user, channel, ct);
             status = (int)MessageSendStatus.Sent;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

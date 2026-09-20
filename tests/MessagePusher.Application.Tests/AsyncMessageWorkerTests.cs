@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using MessagePusher.Domain;
+using Microsoft.Extensions.Logging;
 using MessagePusher.Application.Abstractions;
 using MessagePusher.Application.Abstractions.Repositories;
 using MessagePusher.Application.Channels;
@@ -27,6 +30,10 @@ public class AsyncMessageWorkerTests
         private readonly IReadOnlyList<int> _pendingIds;
         private readonly bool _failPending;
         public List<(int Id, int Status)> StatusUpdates { get; } = [];
+        private readonly ConcurrentDictionary<int, int> _statuses = new();
+        private int _reads;
+        public int Reads => Volatile.Read(ref _reads);
+        public Func<CancellationToken, Task>? BeforeReplay { get; set; }
 
         public FakeMessageRepository(IReadOnlyList<int> pendingIds, bool failPending = false)
         {
@@ -34,16 +41,26 @@ public class AsyncMessageWorkerTests
             _failPending = failPending;
         }
 
-        public Task<IReadOnlyList<int>> GetAsyncPendingIdsAsync(CancellationToken ct = default) =>
-            _failPending
-                ? throw new InvalidOperationException("pending recovery failed")
-                : Task.FromResult(_pendingIds);
+        public async Task<IReadOnlyList<int>> GetAsyncPendingIdsAsync(CancellationToken ct = default)
+        {
+            if (BeforeReplay is not null) await BeforeReplay(ct);
+            if (_failPending) throw new InvalidOperationException("pending recovery failed");
+            return _pendingIds;
+        }
 
-        public Task<Message?> GetByIdAsync(int id, CancellationToken ct = default) =>
-            Task.FromResult<Message?>(new Message { Id = id, UserId = 1, Channel = "ch" });
+        public Task<Message?> GetByIdAsync(int id, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _reads);
+            return Task.FromResult<Message?>(new Message
+            {
+                Id = id, UserId = 1, Channel = "ch",
+                Status = _statuses.GetValueOrDefault(id, (int)MessageSendStatus.AsyncPending)
+            });
+        }
 
         public Task UpdateStatusAsync(Message message, int status, CancellationToken ct = default)
         {
+            _statuses[message.Id] = status;
             lock (StatusUpdates) StatusUpdates.Add((message.Id, status));
             return Task.CompletedTask;
         }
@@ -125,7 +142,7 @@ public class AsyncMessageWorkerTests
         }
     }
 
-    private static (AsyncMessageWorker Worker, FakeMessageRepository Repo, List<int> Sent, AsyncMessageQueue Queue) CreateWorker(int pendingCount, bool failPending = false)
+    private static (AsyncMessageWorker Worker, FakeMessageRepository Repo, List<int> Sent, AsyncMessageQueue Queue) CreateWorker(int pendingCount, bool failPending = false, ILogger<AsyncMessageWorker>? logger = null)
     {
         var pending = Enumerable.Range(1, pendingCount).ToList();
         var repo = new FakeMessageRepository(pending, failPending);
@@ -138,7 +155,7 @@ public class AsyncMessageWorkerTests
             [typeof(ChannelProviderFactory)] = new ChannelProviderFactory([new RecordingProvider(sent)])
         });
         var queue = new AsyncMessageQueue();
-        var worker = new AsyncMessageWorker(queue, new FakeScopeFactory(sp), NullLogger<AsyncMessageWorker>.Instance);
+        var worker = new AsyncMessageWorker(queue, new FakeScopeFactory(sp), logger ?? NullLogger<AsyncMessageWorker>.Instance);
         return (worker, repo, sent, queue);
     }
 
@@ -152,6 +169,38 @@ public class AsyncMessageWorkerTests
             await Task.Delay(20);
         }
         Assert.Fail($"condition not met within {timeoutMs}ms");
+    }
+
+    [Fact]
+    public async Task Replay_snapshot_overlapping_live_enqueue_does_not_send_twice()
+    {
+        var (worker, repo, sent, queue) = CreateWorker(1);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        repo.BeforeReplay = async ct => { started.SetResult(); await release.Task.WaitAsync(ct); };
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            await queue.EnqueueAsync(1, CancellationToken.None);
+            await WaitFor(() => { lock (repo.StatusUpdates) return repo.StatusUpdates.Count == 1; });
+            release.SetResult(); // 回灌包含已由实时入队路径处理的同一个 ID。
+            await WaitFor(() => repo.Reads >= 2);
+        }
+        finally { release.TrySetResult(); await worker.StopAsync(CancellationToken.None); }
+        lock (sent) Assert.Equal(new[] { 1 }, sent);
+        lock (repo.StatusUpdates) Assert.Single(repo.StatusUpdates);
+    }
+
+    [Fact]
+    public async Task Replay_failure_is_logged_before_shutdown()
+    {
+        var logs = new RecordingLogs();
+        using var factory = LoggerFactory.Create(b => b.AddProvider(logs));
+        var (worker, _, _, _) = CreateWorker(1, failPending: true, factory.CreateLogger<AsyncMessageWorker>());
+        await worker.StartAsync(CancellationToken.None);
+        try { await WaitFor(() => logs.Lines.Any(x => x.Contains("replay error")), 1000); }
+        finally { await worker.StopAsync(CancellationToken.None); }
     }
 
     [Fact]
