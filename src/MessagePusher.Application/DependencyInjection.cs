@@ -69,7 +69,9 @@ public static class DependencyInjection
         services.AddSingleton<IChannelConfigValidator, PushMeConfigValidator>();
         services.AddSingleton<ChannelConfigValidatorRegistry>();
 
-        services.AddHttpClient("channels", c => c.Timeout = TimeSpan.FromSeconds(30));
+        // 路径可能包含 SendKey/webhook 凭证，默认 HTTP 日志会打印完整路径。
+        // 由已脱敏的业务错误承担排障输出，不能仅靠 Header 脱敏保护 URL。
+        services.AddHttpClient("channels", c => c.Timeout = TimeSpan.FromSeconds(30)).RemoveAllLoggers();
         services.AddHttpClient("token-store", c => c.Timeout = TimeSpan.FromSeconds(5));
         services.AddHttpClient("oauth", c => c.Timeout = TimeSpan.FromSeconds(5));
         return services;

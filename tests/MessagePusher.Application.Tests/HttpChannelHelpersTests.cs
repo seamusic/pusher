@@ -177,11 +177,45 @@ public class HttpChannelHelpersTests
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
         var sw = Stopwatch.StartNew();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+        var error = await Assert.ThrowsAsync<BusinessException>(() =>
             HttpChannelHelpers.SendAndReadAsync(client, HttpMethod.Post, "https://example.com/send",
                 new StringContent("{}"), "测试通道", CancellationToken.None));
+        Assert.Contains("超时", error.Message);
         sw.Stop();
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"timeout not enforced, elapsed {sw.Elapsed}");
+    }
+
+    [Fact]
+    public async Task Caller_cancellation_during_request_is_not_reported_as_timeout()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new StubHandler(async (_, ct) =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("unreachable");
+        });
+        using var client = new HttpClient(handler);
+        using var cts = new CancellationTokenSource();
+        var sending = HttpChannelHelpers.SendAndReadAsync(client, HttpMethod.Post, "https://example.com/send",
+            new StringContent("{}"), "测试通道", cts.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sending);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public void Error_reason_and_encoded_credentials_are_redacted()
+    {
+        const string secret = "fake key+/&中文";
+        using var response = new HttpResponseMessage(HttpStatusCode.BadGateway) { ReasonPhrase = "SCT_FAKE" };
+        var error = HttpChannelHelpers.BuildHttpError("test", response,
+            Uri.EscapeDataString(secret) + " " + WebUtility.UrlEncode(secret), [secret, "SCT_FAKE"]);
+        Assert.DoesNotContain("SCT_FAKE", error);
+        Assert.DoesNotContain(Uri.EscapeDataString(secret), error);
+        Assert.DoesNotContain(WebUtility.UrlEncode(secret), error);
+        Assert.Contains("***", error);
     }
 
     [Fact]

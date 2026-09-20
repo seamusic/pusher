@@ -54,6 +54,33 @@ internal static class HttpChannelHelpers
     public static StringContent JsonContent(object body, JsonSerializerOptions? options = null) =>
         new(JsonSerializer.Serialize(body, options ?? JsonDefaults.Options), Encoding.UTF8, "application/json");
 
+    // 只统一 JSON 解码错误，业务成功仍由各通道判断；解析异常不携带上游原文。
+    public static T ParseResponse<T>(string body, string channelLabel) where T : class
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(body, OutboundJson.Options)
+                   ?? throw new BusinessException($"{channelLabel} 响应无效：缺少响应对象");
+        }
+        catch (JsonException)
+        {
+            throw new BusinessException($"{channelLabel} 响应格式无效：不是预期的 JSON 数据");
+        }
+    }
+
+    public static BusinessException BusinessFailure(string channelLabel, string? detail, params string?[] secrets)
+    {
+        var safe = SafeErrorText(detail ?? "", secrets);
+        return new BusinessException(string.IsNullOrWhiteSpace(safe)
+            ? $"{channelLabel} 发送失败" : $"{channelLabel} 发送失败：{safe}");
+    }
+
+    private static string SafeErrorText(string text, params string?[] secrets)
+    {
+        var safe = SecretMask.Redact(StripToPlainText(SecretMask.Redact(text, secrets)), secrets);
+        return safe.Length > 200 ? safe[..200] + "…" : safe;
+    }
+
     // 所有权：读取失败时由本方法释放 resp；正常返回后由调用方释放 resp。
     public static async Task<(HttpResponseMessage resp, string body)> PostRawAsync(HttpClient client, string url, object body, CancellationToken ct, Dictionary<string, string>? headers = null, JsonSerializerOptions? options = null)
     {
@@ -122,9 +149,13 @@ internal static class HttpChannelHelpers
         {
             resp = await client.SendAsync(req, ct);
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new BusinessException($"{channelLabel} 请求超时，请检查上游服务状态");
+        }
         catch (HttpRequestException ex)
         {
-            throw new BusinessException($"{channelLabel} 请求失败：{SecretMask.Redact(ex.Message, sensitive)}");
+            throw new BusinessException($"{channelLabel} 请求失败：{SafeErrorText(ex.Message, sensitive)}");
         }
 
         using (resp)
@@ -133,6 +164,10 @@ internal static class HttpChannelHelpers
             try
             {
                 body = await resp.Content.ReadAsStringAsync(ct);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new BusinessException($"{channelLabel} 读取响应超时");
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -147,12 +182,10 @@ internal static class HttpChannelHelpers
 
     public static string BuildHttpError(string channelLabel, HttpResponseMessage resp, string body, string[]? sensitive = null)
     {
-        var excerpt = SecretMask.Redact(StripToPlainText(body), sensitive ?? []);
-        if (excerpt.Length > 200)
-            excerpt = excerpt[..200] + "…";
+        var excerpt = SafeErrorText(body, sensitive ?? []);
         var status = $"HTTP {(int)resp.StatusCode}";
         if (!string.IsNullOrEmpty(resp.ReasonPhrase))
-            status += $" {resp.ReasonPhrase}";
+            status += $" {SafeErrorText(resp.ReasonPhrase, sensitive ?? [])}";
         return string.IsNullOrWhiteSpace(excerpt)
             ? $"{channelLabel} 调用失败：{status}"
             : $"{channelLabel} 调用失败：{status}，响应：{excerpt}";
@@ -186,14 +219,26 @@ internal static class OutboundUrlPolicy
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             throw new BusinessException($"{channelLabel} 地址无效，必须为 http/https 绝对地址");
 
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+            throw new BusinessException($"{channelLabel} 地址不能包含用户名或密码，请使用 Secret 配置凭证");
+
         var allowHttp = string.Equals(Environment.GetEnvironmentVariable("CHANNEL_URL_ALLOW_NON_HTTPS"), "true", StringComparison.OrdinalIgnoreCase)
                         || options.GetBool("ChannelUrlAllowNonHttps");
         if (uri.Scheme == Uri.UriSchemeHttp && !allowHttp)
             throw new BusinessException($"{channelLabel}必须使用 HTTPS 协议，或在系统设置中开启 ChannelUrlAllowNonHttps");
 
         var server = options.Get("ServerAddress", AppDefaults.ServerAddress);
-        if (!string.IsNullOrWhiteSpace(server) && url.StartsWith(server, StringComparison.OrdinalIgnoreCase))
-            throw new BusinessException($"{channelLabel}不能使用本服务地址");
+        if (Uri.TryCreate(server, UriKind.Absolute, out var self)
+            && uri.Scheme.Equals(self.Scheme, StringComparison.OrdinalIgnoreCase)
+            && uri.IdnHost.TrimEnd('.').Equals(self.IdnHost.TrimEnd('.'), StringComparison.OrdinalIgnoreCase)
+            && uri.Port == self.Port)
+        {
+            var basePath = self.GetComponents(UriComponents.Path, UriFormat.Unescaped).TrimEnd('/');
+            var targetPath = uri.GetComponents(UriComponents.Path, UriFormat.Unescaped).TrimEnd('/');
+            if (basePath.Length == 0 || targetPath.Equals(basePath, StringComparison.Ordinal)
+                || targetPath.StartsWith(basePath + "/", StringComparison.Ordinal))
+                throw new BusinessException($"{channelLabel}不能使用本服务地址");
+        }
 
         return uri;
     }
@@ -210,11 +255,11 @@ internal static class SecretMask
     // 将文本中出现的凭证原样替换为占位符，用于错误消息与日志脱敏。
     public static string Redact(string text, params string?[] secrets)
     {
-        foreach (var secret in secrets)
-        {
-            if (!string.IsNullOrEmpty(secret))
-                text = text.Replace(secret, Placeholder, StringComparison.Ordinal);
-        }
+        var variants = secrets.Where(s => !string.IsNullOrEmpty(s))
+            .SelectMany(s => new[] { s!, Uri.EscapeDataString(s!), System.Net.WebUtility.UrlEncode(s!) })
+            .Distinct(StringComparer.Ordinal).OrderByDescending(s => s.Length);
+        foreach (var secret in variants)
+            text = text.Replace(secret, Placeholder, StringComparison.Ordinal);
         return text;
     }
 
