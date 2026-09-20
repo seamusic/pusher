@@ -278,16 +278,16 @@ public class TokenStoreCrossTypeTests
         }
     }
 
-    private sealed class CountingRepo : IChannelRepository
+    private sealed class CountingRepo(int remainingReferences, IReadOnlyList<Channel>? ownedChannels) : IChannelRepository
     {
-        public Task<int> CountSharedAsync(string type, string appId, string secret, CancellationToken ct = default) => Task.FromResult(1);
+        public Task<int> CountSharedAsync(string type, string appId, string secret, CancellationToken ct = default) => Task.FromResult(remainingReferences);
         public Task<Channel?> GetByIdAsync(int id, int userId, bool selectAll, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Channel?> GetByNameAsync(string name, int userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<Channel>> GetByUserIdAsync(int userId, int offset, int count, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<BriefChannel>> GetBriefByUserIdAsync(int userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<Channel>> SearchAsync(int userId, string keyword, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<Channel>> GetTokenStoreChannelsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Channel>>([]);
-        public Task<IReadOnlyList<Channel>> GetTokenStoreChannelsByUserIdAsync(int userId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Channel>>([]);
+        public Task<IReadOnlyList<Channel>> GetTokenStoreChannelsByUserIdAsync(int userId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Channel>>(ownedChannels ?? []);
         public Task AddAsync(Channel channel, CancellationToken ct = default) => throw new NotSupportedException();
         public Task UpdateAsync(Channel channel, CancellationToken ct = default) => throw new NotSupportedException();
         public Task UpdateStatusAsync(Channel channel, int status, CancellationToken ct = default) => throw new NotSupportedException();
@@ -301,17 +301,55 @@ public class TokenStoreCrossTypeTests
         public object? GetService(Type serviceType) => _map.TryGetValue(serviceType, out var s) ? s : null;
     }
 
-    private static TokenStore CreateStore()
+    private static TokenStore CreateStore(int remainingReferences = 0, IReadOnlyList<Channel>? ownedChannels = null)
     {
         var sp = new FakeServiceProvider(new Dictionary<Type, object>
         {
-            [typeof(IChannelRepository)] = new CountingRepo()
+            [typeof(IChannelRepository)] = new CountingRepo(remainingReferences, ownedChannels)
         });
         return new TokenStore(new FakeScopeFactory(sp), new FakeHttpFactory(new OkHandler()), NullLogger<TokenStore>.Instance);
     }
 
     private static Channel LarkApp(string appId, string secret) =>
         new() { Type = ChannelType.LarkApp, AppId = appId, Secret = secret };
+
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    public async Task User_cleanup_excludes_all_own_references_but_preserves_other_users(int references, bool keep)
+    {
+        var first = LarkApp("shared_app", "shared_key");
+        var second = LarkApp("shared_app", "shared_key");
+        using var store = CreateStore(references, [first, second]);
+        await store.AddChannelAsync(first);
+        await store.RemoveUserAsync(new User { Id = 1 });
+        Assert.Equal(keep ? "t-feishu" : "", store.GetToken("shared_appshared_key"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Editing_or_deleting_a_channel_preserves_the_last_other_reference(bool deleting)
+    {
+        using var store = CreateStore(remainingReferences: 1);
+        var old = LarkApp("cli_shared", "sec_shared");
+        await store.AddChannelAsync(old);
+        if (deleting)
+            await store.RemoveChannelAsync(old);
+        else
+            await store.UpdateChannelAsync(new Channel { Type = ChannelType.None }, old);
+        Assert.Equal("t-feishu", store.GetToken("cli_sharedsec_shared"));
+    }
+
+    [Fact]
+    public async Task Deleting_last_channel_removes_unreferenced_token()
+    {
+        using var store = CreateStore(remainingReferences: 0);
+        var old = LarkApp("cli_last", "sec_last");
+        await store.AddChannelAsync(old);
+        await store.RemoveChannelAsync(old);
+        Assert.Equal("", store.GetToken("cli_lastsec_last"));
+    }
 
     [Fact]
     public async Task Temp_token_to_static_key_removes_old_entry()

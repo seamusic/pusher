@@ -67,7 +67,7 @@ public sealed class TokenStore : BackgroundService, ITokenStore
         if (!IsTokenStoreType(channel.Type))
             return;
         var item = Channel2Item(channel);
-        if (item is not null && !await IsSharedAsync(item, ct))
+        if (item is not null && !await HasRemainingReferencesAsync(item, ct))
             RemoveItem(item);
     }
 
@@ -78,7 +78,7 @@ public sealed class TokenStore : BackgroundService, ITokenStore
         if (IsTokenStoreType(oldChannel.Type))
         {
             var oldItem = Channel2Item(oldChannel);
-            if (oldItem is not null && !await IsSharedAsync(oldItem, ct))
+            if (oldItem is not null && !await HasRemainingReferencesAsync(oldItem, ct))
                 RemoveItem(oldItem);
         }
 
@@ -113,10 +113,11 @@ public sealed class TokenStore : BackgroundService, ITokenStore
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
         var channels = await repo.GetTokenStoreChannelsByUserIdAsync(user.Id, ct);
-        foreach (var ch in channels)
+        // 此路径在删库前调用，排除该用户全部引用，保留其他用户共用的 Token。
+        foreach (var group in channels.GroupBy(ch => (ch.Type, ch.AppId, ch.Secret)))
         {
-            var item = Channel2Item(ch);
-            if (item is not null && !await IsSharedAsync(item, ct))
+            var item = Channel2Item(group.First());
+            if (item is not null && !await HasRemainingReferencesAsync(item, ct, group.Count()))
                 RemoveItem(item);
         }
     }
@@ -194,11 +195,12 @@ public sealed class TokenStore : BackgroundService, ITokenStore
         }
     }
 
-    private async Task<bool> IsSharedAsync(ITokenStoreItem item, CancellationToken ct)
+    // 通道编辑/删除已落库，剩余一个引用也必须保留；用户清理可排除待移除的引用。
+    private async Task<bool> HasRemainingReferencesAsync(ITokenStoreItem item, CancellationToken ct, int excludedReferences = 0)
     {
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-        return await repo.CountSharedAsync(item.Type, item.AppId, item.Secret, ct) > 1;
+        return await repo.CountSharedAsync(item.Type, item.AppId, item.Secret, ct) > excludedReferences;
     }
 
     private ITokenStoreItem? Channel2Item(Channel channel) => channel.Type switch
